@@ -1,73 +1,96 @@
-# Solidity Auditor
+# solidity-auditor v3.0.0
 
-A security agent with a simple mission - findings in minutes, not weeks.
-
-Built for:
-
-- **Solidity devs** who want a security check before every commit
-- **Security researchers** looking for fast wins before a manual review
-- **Just about anyone** who wants an extra pair of eyes.
-
-Not a substitute for a formal audit - but the check you should never skip.
-
-## Demo
-
-_Portrayed below: finding multiple high-confidence vulnerabilities in a codebase_
-
-![Running solidity-auditor in terminal](../static/skill_pag.gif)
-
-## Usage
+A production multi-agent system for Solidity security auditing. Ships as a
+Claude skill and as a deployable service running the same graph.
 
 ```
-Install https://github.com/pashov/skills/ and run solidity auditor on the codebase
+PREFLIGHT → INGEST → MAP → [human gate] → ROUTE → HUNT → VERIFY
+          → REDUCE → JUDGE → REPORT → POSTFLIGHT
 ```
 
-```
-run solidity auditor on *specified files*
-```
+## What is here
 
 ```
-update skill to latest version
+SKILL.md                  the orchestrator — start here
+CHANGELOG.md              what changed from v2.7 and why
+MIGRATION.md              dropping your existing agent files in
+VERSION
+
+references/
+  orchestration/          routing, verification, reliability, judging,
+                          confidence, observability, report format, prompts
+  schemas/                finding, system map, run manifest (JSON Schema)
+  scripts/                validate_findings.py, reduce.py, render_report.py
+  hacking-agents/         the SOP, shared rules, and every specialty lens
+  evals/                  corpus manifest, ground truth format, score.py
+
+service/                  the deployable twin — FastAPI, A2A, Cloud Run, ADK
 ```
 
-## Tips
+## Quick start — as a skill
 
-- **Target hot contracts.** Rather than scanning an entire repo, point the tool at the 2-5 contracts you're actively changing. Smaller scope means denser context for each agent and higher-signal findings.
-- **Run more than once.** LLM output is non-deterministic — each run can surface different vulnerabilities. Two or three passes over the same code often catch things a single pass misses.
-
-## Local fork: three additional agents
-
-This copy is upstream **v3** with three agents added that are not in the upstream
-skill. Base files are unmodified except `SKILL.md`, which routes to them.
-
-| Agent | Bundle | Prompt | Covers |
-|-------|--------|--------|--------|
-| `signature-trust-agent` | 13 | single-specialty (3a-i) | What a signature actually proves vs. what the contract assumes: digest binding, replay, chainId, nonce and deadline handling |
-| `hook-ordering-agent` | 14 | single-specialty (3a-i) | Hooks / callbacks / extension points as untrusted execution contexts that observe intermediate state, return malicious deltas, or re-enter |
-| `signature-gap-agent` | 15 | gap-hunter (3a-ii) | The seam between signature trust x access control x execution trace |
-
-Agent count is therefore **15**, not 12. Every count in `SKILL.md` has been
-updated to match.
-
-### Compatibility notes
-
-- All three use "Add to FINDINGs", so they extend the `shared-rules.md` output
-  contract rather than replacing it. v3's `group_key` field (used by dedup) is
-  inherited correctly.
-- v3's expanded `asymmetry-agent` has no hook or callback coverage, so
-  `hook-ordering-agent` remains a genuine gap-filler rather than a duplicate.
-
-### Rebasing again
-
-These three files are the entire local delta:
+Install the bundle as a skill, copy your v2.7 specialty files in per
+`MIGRATION.md`, then:
 
 ```
-references/hacking-agents/signature-trust-agent.md
-references/hacking-agents/signature-gap-agent.md
-references/hacking-agents/hook-ordering-agent.md
+audit
+audit --budget quick src/Vault.sol
+audit --diff HEAD~1 --yes            # CI mode
 ```
 
-To take a future upstream release: start from upstream, copy those three in, then
-re-apply the `SKILL.md` edits (bundle table rows 13-15, agent counts, and the
-prompt-routing note). Do NOT merge in the other direction — a fork pinned to an
-older base silently accumulates stale guidance while upstream improves.
+## Quick start — as a service
+
+```bash
+cd service
+pip install -e '.[server,anthropic,dev]'
+pytest -q                                          # 44 tests, offline
+python -m audit_mas.cli roster ./contracts         # see the routing decision
+python -m audit_mas.cli audit  ./contracts --budget standard
+```
+
+## The five things that make it production
+
+**Routing.** Agents spawn because the map found evidence for them. Six always-on
+core lanes, then specialists triggered by what the code actually contains. Cost
+tracks attack surface instead of tracking a constant.
+
+**A schema.** Agents emit validated JSON. A malformed record is quarantined and
+counted, never silently dropped — because "nobody found anything" and "the
+output was unparseable" must not look alike.
+
+**An adversarial verifier.** A separate critic with narrow context tries to kill
+every medium-and-above finding. It records its strongest counter-argument even
+when the finding survives, and that argument is printed in the report.
+
+**Deterministic reduction.** Dedup, function isolation, fix preservation,
+completeness and coverage are code. Confidence is a formula. Severity is clamped
+by confidence.
+
+**Visible failure.** Per-agent status, one retry, quorum, DEGRADED banners, a
+run manifest with cost and coverage, and a hard refusal to render a report from
+a half-dead fan-out.
+
+## Before changing anything
+
+Run the eval corpus. `references/evals/README.md`.
+
+No version bump without a before/after on recall, precision and context
+amplification — that rule is the reason this version exists.
+
+## Provenance
+
+Hunting lenses adapted from [evm-cortex](https://github.com/ccashwell/evm-cortex)
+and the Pashov-style attacker methodology carried forward from v2.7.
+
+Architecture informed by
+[Anthropic's multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
+(orchestrator-worker, token economics, evaluation, production reliability),
+Google's [production MAS codelab](https://codelabs.developers.google.com/codelabs/production-ready-ai-roadshow/1-building-a-multi-agent-system/building-a-multi-agent-system)
+and [multi-agent guide](https://cloud.google.com/discover/what-is-a-multi-agent-system)
+(loop/sequential/parallel composition, structured output, A2A, agent cards), and
+the decoupled-audit literature on separating generation from verification
+([arXiv:2606.03128](https://arxiv.org/html/2606.03128v1)).
+
+2026 threat surface from
+[Dedaub's Solidity vulnerability guide](https://dedaub.com/blog/solidity-security-vulnerabilities/)
+and [Zealynx's EIP-7702 wallet security research](https://www.zealynx.io/research/smart-contracts/eip-7702-wallet-security).

@@ -1,0 +1,24 @@
+{
+  "case_id": "EXAMPLE-vault-share-inflation",
+  "source": "https://code4rena.com/reports/<replace-me>",
+  "contracts": ["src/Vault.sol"],
+  "notes": "Template. Replace with a real case. `severity` is the JUDGED severity from the report, not the reporter's claim.",
+  "bugs": [
+    {
+      "contract": "Vault",
+      "function": "deposit",
+      "bug_class": "share-inflation",
+      "severity": "high",
+      "description": "First depositor donates assets directly to inflate the share price so later depositors round down to zero shares.",
+      "source_ref": "H-01"
+    },
+    {
+      "contract": "Vault",
+      "function": "withdraw",
+      "bug_class": "reentrancy",
+      "severity": "high",
+      "description": "Balance is zeroed after the external transfer, so a receiving hook can re-enter and drain.",
+      "source_ref": "H-02"
+    }
+  ]
+}

@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solidity-auditor/schemas/run-manifest.schema.json",
+  "title": "Run Manifest v3",
+  "description": "The observability record for one audit run. Written incrementally to {bundle_dir}/run.json so a crashed run is still diagnosable and a resumed run knows what already completed. This file is the reason a v3 run is debuggable and a v2 run was not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "started_at", "skill_version", "phases", "agents"],
+  "properties": {
+    "schema_version": { "const": "3.0.0" },
+    "run_id": { "type": "string", "description": "Stable id, e.g. the bundle_dir basename. Used to correlate ledger files, traces and eval results." },
+    "skill_version": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["repo", "files", "diff"] },
+        "budget": { "enum": ["quick", "standard", "deep", "exhaustive"] },
+        "targets": { "type": "array", "items": { "type": "string" } },
+        "flags": { "type": "array", "items": { "type": "string" } },
+        "hitl_gate": { "enum": ["enforced", "skipped-by-flag", "skipped-unattended"] },
+        "model_tiers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Resolved tier -> model identifier mapping, or {} when the runtime does not expose model selection."
+        }
+      }
+    },
+
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "enum": ["preflight", "ingest", "map", "gate", "route", "hunt", "verify", "reduce", "judge", "report", "postflight"] },
+          "status": { "enum": ["pending", "running", "ok", "degraded", "failed", "skipped"] },
+          "started_at": { "type": "string", "format": "date-time" },
+          "duration_s": { "type": "number", "minimum": 0 },
+          "note": { "type": "string" }
+        }
+      }
+    },
+
+    "agents": {
+      "type": "array",
+      "description": "One entry per spawned hunt/verify agent. Populated at spawn time with status=spawned so a hung agent is visible, not invisible.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_id", "status"],
+        "properties": {
+          "agent_id": { "type": "string" },
+          "role": { "enum": ["lane", "gap", "domain", "proof", "platform", "verifier"] },
+          "spawn_reason": { "type": "string", "description": "Which evidence flag or always-on rule caused this agent to run. Makes routing decisions auditable." },
+          "model_tier": { "enum": ["triage", "deep", "verify"] },
+          "context_slice": { "type": "string", "description": "Which bundle/slice the agent received." },
+          "slice_lines": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["spawned", "ok", "retried-ok", "timeout", "invalid-output", "quarantined", "failed", "skipped"] },
+          "attempts": { "type": "integer", "minimum": 0 },
+          "duration_s": { "type": "number", "minimum": 0 },
+          "records_emitted": { "type": "integer", "minimum": 0 },
+          "records_valid": { "type": "integer", "minimum": 0 },
+          "markers": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "feynman": { "type": "integer", "minimum": 0 },
+              "socratic": { "type": "integer", "minimum": 0 },
+              "inversion": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hot_function_axis_pairs": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "axisgap_leads": { "type": "integer", "minimum": 0 },
+        "unique_contract_function_raw": { "type": "integer", "minimum": 0 },
+        "unique_contract_function_final": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "candidates_sent": { "type": "integer", "minimum": 0 },
+        "confirmed": { "type": "integer", "minimum": 0 },
+        "weakened": { "type": "integer", "minimum": 0 },
+        "refuted": { "type": "integer", "minimum": 0 },
+        "not_run": { "type": "integer", "minimum": 0 },
+        "poc_compiled": { "type": "integer", "minimum": 0 },
+        "poc_passing": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "quorum": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reliability accounting. If ratio < threshold the report is stamped DEGRADED and names the missing lanes.",
+      "properties": {
+        "expected_agents": { "type": "integer", "minimum": 0 },
+        "returned_valid": { "type": "integer", "minimum": 0 },
+        "ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.8 },
+        "degraded": { "type": "boolean" },
+        "missing_lanes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Best-effort. Omit fields the runtime does not report rather than guessing.",
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cached_input_tokens": { "type": "integer", "minimum": 0 },
+        "wall_clock_s": { "type": "number", "minimum": 0 },
+        "context_amplification": { "type": "number", "description": "total input tokens / source tokens. v2.7 sat near the agent count; v3 targets well under it via slicing." }
+      }
+    },
+
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "critical": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 },
+        "medium": { "type": "integer", "minimum": 0 },
+        "low": { "type": "integer", "minimum": 0 },
+        "informational": { "type": "integer", "minimum": 0 },
+        "leads": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

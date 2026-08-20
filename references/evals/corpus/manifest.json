@@ -1,0 +1,58 @@
+{
+  "schema_version": "3.0.0",
+  "note": "Case list for the v3 eval corpus. Sources are public audit reports and standard vulnerable-contract sets. Populate `path` as you add each case locally; the corpus contracts are deliberately NOT vendored into the skill so they never leak into an agent bundle.",
+  "target_size": 20,
+  "groups": {
+    "known-vulnerable": {
+      "purpose": "measures recall against judged public findings",
+      "target": 8,
+      "cases": [
+        { "case_id": "vault-share-inflation", "surface": "ERC-4626 first depositor / donation", "severity_span": ["high"], "path": null },
+        { "case_id": "lending-liquidation-rounding", "surface": "liquidation bonus rounds to zero at small collateral", "severity_span": ["medium", "high"], "path": null },
+        { "case_id": "oracle-stale-l2", "surface": "missing sequencer uptime + staleness check", "severity_span": ["high"], "path": null },
+        { "case_id": "amm-fee-asymmetry", "surface": "exact-in vs exact-out fee direction mismatch", "severity_span": ["medium"], "path": null },
+        { "case_id": "permit-missing-deadline", "surface": "EIP-2612 signature replay", "severity_span": ["high"], "path": null },
+        { "case_id": "hook-order-after-mutation", "surface": "hook called after state mutation it was meant to guard", "severity_span": ["high"], "path": null },
+        { "case_id": "async-vault-claim-race", "surface": "ERC-7540 request lifecycle double-claim", "severity_span": ["high"], "path": null },
+        { "case_id": "reward-accounting-drift", "surface": "accumulator truncation vs untruncated total", "severity_span": ["medium"], "path": null }
+      ]
+    },
+    "patched-pairs": {
+      "purpose": "the strongest signal available - a system that flags both halves is pattern-matching, not reasoning",
+      "target": 4,
+      "cases": [
+        { "case_id": "vault-share-inflation-patched", "pairs_with": "vault-share-inflation", "expect": "zero findings at the patched function", "path": null },
+        { "case_id": "oracle-stale-l2-patched", "pairs_with": "oracle-stale-l2", "expect": "zero findings at the patched function", "path": null },
+        { "case_id": "permit-missing-deadline-patched", "pairs_with": "permit-missing-deadline", "expect": "zero findings at the patched function", "path": null },
+        { "case_id": "hook-order-after-mutation-patched", "pairs_with": "hook-order-after-mutation", "expect": "zero findings at the patched function", "path": null }
+      ]
+    },
+    "clean": {
+      "purpose": "measures the false-positive rate - the metric that decides whether the tool gets used twice",
+      "target": 4,
+      "cases": [
+        { "case_id": "clean-erc20-standard", "surface": "audited, widely deployed token", "path": null },
+        { "case_id": "clean-timelock", "surface": "audited governance timelock", "path": null },
+        { "case_id": "clean-erc4626-reference", "surface": "reference vault implementation", "path": null },
+        { "case_id": "clean-multisig", "surface": "audited multisig wallet", "path": null }
+      ]
+    },
+    "surface-coverage": {
+      "purpose": "confirms the new v3 lenses fire at all - a routing test more than a hunting test",
+      "target": 4,
+      "cases": [
+        { "case_id": "aa-7702-unauth-execute", "surface": "EIP-7702 delegate with unauthenticated execute", "expect_agent": "account-abstraction", "path": null },
+        { "case_id": "proxy-slot-collision", "surface": "V2 inserts a slot before an existing variable", "expect_agent": "proxy-upgrade", "path": null },
+        { "case_id": "transient-lock-not-cleared", "surface": "tstore reentrancy lock with an unclearing early return", "expect_agent": "transient-storage", "path": null },
+        { "case_id": "crosschain-chainid-replay", "surface": "signed message omitting block.chainid on a multichain deployment", "expect_agent": "crosschain-l2", "path": null }
+      ]
+    }
+  },
+  "sources": [
+    "https://code4rena.com/reports",
+    "https://audits.sherlock.xyz/contests",
+    "https://solodit.xyz",
+    "https://github.com/theredguild/damn-vulnerable-defi",
+    "https://ethernaut.openzeppelin.com"
+  ]
+}

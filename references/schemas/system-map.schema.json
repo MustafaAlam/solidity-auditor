@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solidity-auditor/schemas/system-map.schema.json",
+  "title": "SystemMapArtifact v3",
+  "description": "Output of the MAP phase. This is the routing input: the ROUTE phase reads `evidence` to decide which specialists to spawn, and `hot_functions` to compute the axis-coverage denominator. A prose-only map cannot drive routing, so v3 requires this JSON alongside the human-readable summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "contracts", "hot_functions", "evidence", "invariants"],
+  "properties": {
+    "schema_version": { "const": "3.0.0" },
+
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "total_sloc"],
+      "properties": {
+        "files": { "type": "array", "items": { "type": "string" } },
+        "total_sloc": { "type": "integer", "minimum": 0 },
+        "excluded": { "type": "array", "items": { "type": "string" } },
+        "solc_version": { "type": "string" },
+        "build_system": { "enum": ["foundry", "hardhat", "unknown", "none"] },
+        "compiles": { "type": "boolean", "description": "Set by the INGEST build probe. Drives whether PoCs can reach status=compiled." }
+      }
+    },
+
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "file"],
+        "properties": {
+          "name": { "type": "string" },
+          "file": { "type": "string" },
+          "kind": { "enum": ["contract", "library", "abstract", "interface"] },
+          "inherits": { "type": "array", "items": { "type": "string" } },
+          "state_vars": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "writers": { "type": "array", "items": { "type": "string" }, "description": "Functions that write it. A var with >=2 writers of differing guard strength is a routing trigger for access-control." },
+                "guard_of_weakest_writer": { "type": "string" }
+              }
+            }
+          },
+          "external_surface": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["function", "visibility"],
+              "properties": {
+                "function": { "type": "string" },
+                "visibility": { "enum": ["external", "public"] },
+                "mutability": { "enum": ["payable", "nonpayable", "view", "pure"] },
+                "guard": { "type": "string", "description": "Modifier chain or 'none'." },
+                "makes_external_call": { "type": "boolean" },
+                "moves_value": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "value_flow": {
+      "type": "array",
+      "description": "High-level call / value edges.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "carries": { "enum": ["control", "value", "both"] },
+          "trust": { "enum": ["trusted", "semi-trusted", "untrusted"] }
+        }
+      }
+    },
+
+    "hot_functions": {
+      "type": "array",
+      "description": "Ranked. This list is the denominator of the axis-coverage gate; keep it honest and bounded (typically 10-40).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contract", "function", "risk_weight"],
+        "properties": {
+          "contract": { "type": "string" },
+          "function": { "type": "string" },
+          "risk_weight": { "type": "number", "minimum": 0, "maximum": 1, "description": "Composite of fan-in, state-write impact, value effect, entry-point status. Drives model-tier assignment in ROUTE." },
+          "reasons": { "type": "array", "items": { "type": "string" } },
+          "required_axes": {
+            "type": "array",
+            "items": { "enum": ["theft", "liveness", "accounting", "provenance", "boundary", "identity"] },
+            "description": "Axes that MUST be covered for this function. Defaults to all six for risk_weight >= 0.6; narrower for lower weights. This is what stops the coverage gate from generating hundreds of meaningless AXISGAP leads."
+          }
+        }
+      }
+    },
+
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Boolean/array facts extracted from the code. THE ROUTER READS ONLY THIS. Each flag maps to a specialist in routing.md. Absent evidence means the specialist is not spawned - that is the cost lever.",
+      "properties": {
+        "erc_surfaces": { "type": "array", "items": { "type": "string" }, "description": "e.g. ['ERC20','ERC4626','ERC7540']" },
+        "eip_surfaces": { "type": "array", "items": { "type": "string" }, "description": "e.g. ['EIP712','EIP2612','EIP1153','EIP7702']" },
+        "has_oracle": { "type": "boolean" },
+        "oracle_kinds": { "type": "array", "items": { "type": "string" } },
+        "has_lending": { "type": "boolean", "description": "borrow/repay/liquidate/LTV/interest accrual present." },
+        "has_amm": { "type": "boolean" },
+        "has_vault": { "type": "boolean" },
+        "has_async_request_lifecycle": { "type": "boolean", "description": "request -> pending -> claim/cancel (ERC-7540 style)." },
+        "has_hooks": { "type": "boolean" },
+        "has_signatures": { "type": "boolean" },
+        "has_delegatecall": { "type": "boolean" },
+        "has_proxy_or_upgrade": { "type": "boolean" },
+        "has_transient_storage": { "type": "boolean", "description": "tstore/tload or `transient` keyword." },
+        "has_assembly": { "type": "boolean" },
+        "has_crosschain": { "type": "boolean", "description": "bridge, message passing, chainId handling, L2-specific precompiles." },
+        "has_account_abstraction": { "type": "boolean", "description": "EIP-7702 delegate, ERC-4337 account/paymaster/validator, tx.origin==msg.sender or EXTCODESIZE EOA checks." },
+        "has_fee_math": { "type": "boolean" },
+        "has_fixed_point": { "type": "boolean", "description": "Q64.64, WAD/RAY, E6/E8 scaling." },
+        "has_tokenomics": { "type": "boolean", "description": "emissions, vesting, rewards distribution, ve-style locks." },
+        "has_governance_timelock": { "type": "boolean" },
+        "has_nft_identity": { "type": "boolean" },
+        "external_dependencies": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "invariants": {
+      "type": "array",
+      "description": "Candidate invariants in a form a fuzzer or verifier could actually assert.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^INV-[0-9]+$" },
+          "statement": { "type": "string", "description": "Prefer an executable predicate, e.g. 'totalSupply == sum(balanceOf)'." },
+          "kind": { "enum": ["safety", "liveness", "functional", "accounting"] },
+          "confidence": { "enum": ["stated-by-docs", "inferred-from-code", "speculative"] }
+        }
+      }
+    },
+
+    "trust_boundaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actor", "powers"],
+        "properties": {
+          "actor": { "type": "string" },
+          "trust": { "enum": ["trusted", "semi-trusted", "untrusted"] },
+          "powers": { "type": "array", "items": { "type": "string" } },
+          "acquirable": { "type": "boolean", "description": "Can an attacker obtain this role? Feeds Gate 1." }
+        }
+      }
+    },
+
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things the map could not resolve. Shown to the human at the HITL gate - this is what makes the gate worth a human's time."
+    }
+  }
+}

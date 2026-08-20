@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "audit-mas"
+version = "3.0.0"
+description = "Production multi-agent Solidity security audit — deployable twin of the solidity-auditor skill"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+# Deliberately minimal. The orchestration graph depends on nothing but pydantic
+# and httpx, so the supported path has no framework lock-in.
+dependencies = [
+  "pydantic>=2.7",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+anthropic = ["anthropic>=0.40"]
+vertex = ["google-genai>=1.0"]
+openai = ["openai>=1.40"]
+adk = ["google-adk>=1.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
+all = ["audit-mas[server,anthropic,vertex,openai,dev]"]
+
+[project.scripts]
+audit-mas = "audit_mas.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["audit_mas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# UP042: str+Enum is intentional. StrEnum changes __str__/serialization in
+# ways that would alter the JSON on the wire, and the wire format is the
+# contract this project is built around.
+ignore = ["E501", "B008", "UP042"]

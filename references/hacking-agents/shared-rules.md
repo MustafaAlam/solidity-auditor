@@ -1,75 +1,177 @@
-# Shared Scan Rules
+# Shared Scan Rules (v3)
 
 ## Bundle contents
 
-Your bundle is four concatenated files: all in-scope source code, the SOP (HOW to think), your specialty agent (WHAT to look for), and these shared rules (output format, dedup tags, AND mandatory mental tool protocol).
+Your bundle is: your source slice, the SystemMapArtifact, the SOP (HOW to think),
+your specialty agent (WHAT to look for), and these shared rules (output contract
+and the mandatory mental-tool protocol).
 
-Read the whole bundle once at the start. The bundle contains all in-scope source. Use Read/Grep only for cross-file searches or out-of-scope context (interfaces/, lib/, mocks/, test/) — do not re-read in-scope files for the initial scan.
+Read the whole bundle once at the start. Use Read/Grep only for cross-file
+investigation or context outside your slice — do not re-read slice files for the
+initial scan.
 
-**The protocol below applies continuously during source reading — not just before it.** The "read source" phase does not turn off the protocol; every trigger condition fires the moment it occurs, throughout your entire review.
+**Your slice may not be the whole system.** The system map lists every contract,
+including ones you cannot see. When a value flows in from outside your slice,
+read that file rather than guessing at it. Slicing narrows your default; it never
+forbids a lookup.
 
-When matching function names, check both `functionName` and `_functionName` (Solidity convention).
+**The protocol below applies continuously during source reading — not just before
+it.** Reading source does not turn the protocol off; every trigger fires the
+moment it occurs, throughout the review.
+
+When matching function names, check both `functionName` and `_functionName`.
+
+---
 
 ## Mental tool protocol — MANDATORY
 
-The three tools in `senior-auditor-sop.md` are NOT optional. Each tool has a specific trigger. **When the trigger fires, you MUST emit the corresponding marker in your output stream BEFORE continuing.** No skipping. The markers live in your working text — they do NOT go into the FINDING/LEAD output blocks.
+The three tools in `senior-auditor-sop.md` are not optional. Each has a trigger.
+**When the trigger fires, emit the marker in your response text before
+continuing.** Markers live in your working text — they never go into the ledger
+file.
 
-### Triggers → required markers
+| Trigger | Required marker | Content |
+| --- | --- | --- |
+| You open a new function or contract | `[Feynman: <name>]` | Explain it in plain English. No `mload`, `assembly`, `mstore`, `safeTransfer`, `mulDiv`, `require`, `msg.sender`, storage slots. Keep going until the explanation is solid. Where your wording slips back to jargon, you are papering over an assumption — mark that spot. That is where bugs hide. |
+| You stop on a line whose purpose is not immediately clear | `[Socratic: <file:line> — why?]` | One question that drills past "because that's how it's written". If your answer restates the code, ask again. Stop when the answer exposes the implicit belief the code rests on. |
+| A path reads as clean / a check looks sufficient / a guard looks correct | `[Inversion: <function>]` | Three concrete attacker moves against that path. Specific addresses, values, states — never abstractions. |
 
-| Trigger (the condition) | Marker (required immediately, literal `[Tool: ...]` syntax) | Content |
-|---|---|---|
-| You open a new function or contract to read | `[Feynman: <name>]` | Explain what it does in plain English — no Solidity jargon, no `mload`/`assembly`/`mstore`/`safeTransfer`/etc. Use as many sentences as you need until the explanation is solid. If your wording slips back to jargon, you're papering over an assumption — keep going. Wherever your plain-English explanation gets fuzzy or you have to reach for a Solidity term to keep it accurate, mark that spot — that is where bugs hide. |
-| You stop on a line whose purpose isn't immediately clear | `[Socratic: <file:line> — why?]` | A one-line question that drills past "because that's how it's written." If your first answer is a restatement of the code, ask again. Stop when the answer exposes the implicit belief the code rests on — don't pad with extra steps just to hit a quota. |
-| A code path reads as clean / a check looks sufficient / a guard looks correct | `[Inversion: <function>]` | Three concrete attacker moves that attempt to defeat the path. Specific addresses/values/states, not abstractions. |
+Rules:
 
-### Rules
+1. Triggers are not optional. Condition fires → marker follows.
+2. Use the literal `[Tool: ...]` syntax. Marker counts are extracted after the run
+   and written into the manifest.
+3. Extra markers are fine. Skipping one after its trigger fired is not.
+4. The protocol is about reasoning depth, not output volume. Heavy use produces
+   the audit; light use produces the surface-level scan that is the failure mode
+   of every junior auditor.
 
-1. **Triggers are not optional.** If the condition fires, the marker follows. Always. No skipping.
-2. **Use the literal `[Tool: ...]` syntax.** The orchestrator greps your output for these tags after the run.
-3. **You may emit a marker without a trigger.** Extra Feynman / Inversion markers are fine. You may NOT skip a marker after its trigger fired.
-4. **The protocol applies to reasoning depth, not output volume.** Heavy use of these tools is what produces the audit work. Skipping them = surface-level scanning, which is the failure mode of every junior auditor.
+Marker counts near zero are recorded as workflow violations and downgrade the
+weight of your findings.
 
-The orchestrator verifies marker counts after every run. Skipped markers downgrade the value of your findings and are recorded as workflow violations.
+---
 
 ## Cross-contract patterns
 
-When you find a bug in one contract, **weaponize that pattern across every other contract in the bundle.** Search by function name AND by code pattern. Finding native/ERC20 confusion in `ContractA.onRevert` means you check every other contract's `onRevert` — missing a repeat instance is an audit failure.
+When you find a bug in one contract, **weaponize that pattern across every other
+contract in your slice.** Search by function name AND by code pattern. Finding
+native/ERC20 confusion in `ContractA.onRevert` means checking every other
+contract's `onRevert` — missing a repeat instance is an audit failure.
 
-After scanning: escalate every finding to its worst exploitable variant (DoS may hide fund theft). Then revisit every function where you found something and attack the other branches.
+After scanning: escalate every finding to its worst exploitable variant (a DoS
+may be hiding fund theft). Then revisit every function where you found something
+and attack the other branches.
+
+---
 
 ## Do not report
 
-Admin-only functions doing admin things. Standard DeFi tradeoffs (MEV, rounding dust, first-depositor with MINIMUM_LIQUIDITY). Self-harm-only bugs. "Admin can rug" without a concrete mechanism.
+Admin-only functions doing admin things. Standard DeFi trade-offs (MEV, rounding
+dust, first-depositor with MINIMUM_LIQUIDITY). Self-harm-only bugs. "Admin can
+rug" with no concrete mechanism. Gas optimizations. Style, naming, NatSpec
+completeness — unless a NatSpec claim contradicts the code, which is a real
+finding.
 
-## Output
+---
 
-Return findings as structured blocks:
+## Output contract
 
-FINDINGs have concrete, unguarded, exploitable attack paths. LEADs have real code smells with partial paths — default to LEAD over dropping.
+**You write JSON Lines, not prose.**
 
-**Every FINDING must have a `proof:` field** — concrete values, traces, or state sequences from the actual code. No proof = LEAD, no exceptions.
+Write to `{bundle_dir}/ledger/agent-<your_id>.jsonl`. One JSON object per line,
+each conforming to `schemas/finding.schema.json`. The file is validated
+mechanically; prose in it is a validation failure, and an invalid record gets one
+repair attempt before it is quarantined out of the report.
 
-**One vulnerability per item.** Same root cause = one item. Different fixes needed = separate items.
+### Minimum record
 
-Specialty files may add extra fields (`seam`, `guard_gap`, `pair_or_branch`, …). Always include the fields below so the orchestrator can dedup.
-
+```json
+{
+  "schema_version": "3.0.0",
+  "kind": "FINDING",
+  "agent_id": "oracle-expert",
+  "contract": "PriceFeed",
+  "file": "src/PriceFeed.sol",
+  "function": "latestPrice",
+  "lines": [88, 96],
+  "bug_class": "missing-staleness-check",
+  "group_key": "PriceFeed|latestPrice|missing-staleness-check",
+  "lane": "token-oracle-statefulness",
+  "domain": "oracle",
+  "axes": ["provenance", "accounting"],
+  "severity_claim": "high",
+  "root_cause": "latestPrice returns answer without comparing updatedAt to maxAge.",
+  "description": "Any consumer prices collateral off a feed that may be arbitrarily stale, so a halted feed lets a borrower keep an overvalued position indefinitely.",
+  "path": "borrower -> LendingPool.borrow -> PriceFeed.latestPrice -> stale answer -> over-borrow",
+  "proof": {
+    "kind": "numeric-trace",
+    "content": "Feed halts at t0 with answer=2000e8. At t0+7d spot is 1200e8. borrow() still values 1 unit at 2000e8, permitting 66% more debt than solvency allows.",
+    "values": { "stale_answer": "2000e8", "spot": "1200e8", "delta": "+66%" }
+  },
+  "fix": {
+    "label": "validate",
+    "summary": "Revert when block.timestamp - updatedAt exceeds maxAge.",
+    "add_lines": ["require(block.timestamp - updatedAt <= maxAge, \"stale\")"],
+    "diff": "-        (, int256 answer,,,) = feed.latestRoundData();\n+        (, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();\n+        require(block.timestamp - updatedAt <= maxAge, \"stale\");"
+  },
+  "devils_advocate": {
+    "guards": { "note": "No staleness or sequencer check anywhere on this path.", "blocks": false },
+    "reentrancy": { "note": "View path, not reentrancy-relevant.", "blocks": false },
+    "access": { "note": "borrow() is permissionless.", "blocks": false },
+    "by_design": { "note": "NatSpec claims freshness is validated; the code does not.", "blocks": false },
+    "economic": { "note": "Profitable whenever spot falls below the stale answer; no capital cost.", "blocks": false },
+    "dry_run": { "note": "Reachable from borrow() with default parameters.", "blocks": false },
+    "verdict": "survives"
+  },
+  "poc": {
+    "status": "sketch",
+    "framework": "foundry",
+    "code": "function testStalePriceOverBorrow() public { feed.setAnswer(2000e8); vm.warp(block.timestamp + 7 days); vm.prank(alice); pool.borrow(maxDebtAt(2000e8)); assertGt(pool.debtOf(alice), pool.solventDebtAt(1200e8)); }"
+  }
+}
 ```
-FINDING | contract: Name | function: func | bug_class: kebab-tag | group_key: Contract | function | bug-class
-lane: themed lane
-domain: optional (lending / erc / eip / oracle / vault / tokenomics / poc / formal / fuzz)
-path: caller → function → state change → impact
-proof: concrete values/trace demonstrating the bug
-description: one sentence
-fix: one-sentence suggestion
-da_score: 6 one-line notes (guards / reentrancy / access / by-design / economic / dry-run)
-poc: Foundry sketch or why-not (required if Medium+)
 
-LEAD | contract: Name | function: func | bug_class: kebab-tag | group_key: Contract | function | bug-class
-lane: themed lane
-domain: optional
-code_smells: what you found
-description: one sentence explaining the trail and what remains unverified
-da_score: 6 one-line notes (or why a dimension blocked promotion)
+### The fields that matter most
+
+- **`group_key`** — exactly `"<contract>|<function>|<bug_class>"`. This is the
+  dedup primary key; the validator recomputes it and rejects mismatches.
+- **`proof`** — a FINDING without proof is a LEAD wearing a costume. Concrete
+  values, traces, or state sequences from the actual code. No proof → `kind`
+  becomes `LEAD`, no exceptions.
+- **`axes`** — which of the six risk axes you covered. An agent that never sets
+  axes cannot close coverage, and its clean functions turn into coverage gaps.
+- **`fix.add_lines`** — the added lines alone, normalized. The reducer hashes
+  these to decide whether two fixes are distinct, so a distinct fix survives into
+  the report as its own option instead of being paraphrased away.
+- **`devils_advocate`** — all six dimensions, every time. `blocks: true` with
+  `verdict: "survives"` requires a named `bypass`.
+
+### One vulnerability per record
+
+Same root cause → one record. Different fix needed → separate record. Two
+coexisting bugs in one function are two records with different `bug_class`; the
+reducer keeps both, and function isolation guarantees neither is merged into a
+neighbouring function.
+
+### COVERAGE_NOTE
+
+For every hot function in your slice that you examined and found clean, emit:
+
+```json
+{ "schema_version": "3.0.0", "kind": "COVERAGE_NOTE", "agent_id": "oracle-expert",
+  "contract": "PriceFeed", "function": "decimals", "bug_class": "examined-clean",
+  "group_key": "PriceFeed|decimals|examined-clean", "lane": "token-oracle-statefulness",
+  "axes": ["provenance"], "severity_claim": "informational",
+  "description": "Examined for provenance; returns an immutable constant with no external input.",
+  "path": "n/a — coverage note",
+  "fix": { "label": "validate", "summary": "None needed." },
+  "devils_advocate": { "...all six...": "...", "verdict": "survives" } }
 ```
 
-The `group_key` enables deduplication: `ContractName | functionName | bug_class`.
+This is how the coverage gate tells "checked, clean" from "never looked". Both
+look identical in a findings list, and only one of them is reassuring.
+
+### Fields you must not write
+
+`verification`, `judgment`, `corroboration`. The orchestrator owns those. Records
+that set them are rejected.

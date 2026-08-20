@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solidity-auditor/schemas/finding.schema.json",
+  "title": "Solidity Auditor Finding Record v3",
+  "description": "The wire format every hunt agent MUST emit. One JSON object per candidate. Agents write a JSON Lines file (one record per line) to the ledger. Free-text prose is NOT a valid agent output in v3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "agent_id",
+    "contract",
+    "function",
+    "bug_class",
+    "group_key",
+    "lane",
+    "severity_claim",
+    "description",
+    "path",
+    "fix",
+    "devils_advocate"
+  ],
+  "properties": {
+    "schema_version": { "const": "3.0.0" },
+
+    "kind": {
+      "enum": ["FINDING", "LEAD", "AXISGAP", "COVERAGE_NOTE"],
+      "description": "FINDING requires proof. LEAD is an unverified trail. AXISGAP is emitted by the orchestrator, not by agents. COVERAGE_NOTE records what the agent examined and cleared."
+    },
+
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Slug of the specialty, e.g. 'access-control', 'numerical-gap'. NOT an index number - indices break when routing changes the roster."
+    },
+
+    "contract": { "type": "string", "minLength": 1 },
+    "file": { "type": "string", "description": "Repo-relative path. Strongly recommended; the reducer uses it to disambiguate same-named contracts." },
+    "function": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Function or modifier name. Use 'constructor', 'receive', 'fallback', or '<contract-level>' where no single function applies. Function isolation in reduction is keyed on this - it is never merged across values."
+    },
+    "lines": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "maxItems": 2,
+      "description": "[start] or [start, end] line numbers in `file`."
+    },
+
+    "bug_class": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "kebab-case tag, e.g. 'rounding-direction', 'missing-nonce', 'storage-collision'."
+    },
+    "group_key": {
+      "type": "string",
+      "description": "Canonical dedup key: '<contract>|<function>|<bug_class>'. MUST be exactly those three fields joined by '|' with no spaces."
+    },
+
+    "lane": {
+      "enum": [
+        "semantic-consistency",
+        "callback-liveness",
+        "accounting-entitlement",
+        "token-oracle-statefulness",
+        "economic-differential",
+        "adversarial-deep",
+        "gap-seam",
+        "domain-specialty",
+        "proof-tooling",
+        "platform-surface"
+      ]
+    },
+    "domain": {
+      "enum": ["lending", "erc", "eip", "oracle", "vault", "tokenomics", "account-abstraction", "proxy", "crosschain", "transient", "poc", "formal", "fuzz", "invariant"],
+      "description": "Optional. Set by domain and proof specialists."
+    },
+    "axes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["theft", "liveness", "accounting", "provenance", "boundary", "identity"] },
+      "description": "Which of the six risk axes this record covers. Drives the mechanical axis-coverage gate - an agent that never sets axes cannot close coverage."
+    },
+
+    "severity_claim": {
+      "enum": ["critical", "high", "medium", "low", "informational"],
+      "description": "The AGENT's claim, pre-judging. The orchestrator assigns final severity after gating; this field is never rewritten in place."
+    },
+
+    "description": { "type": "string", "minLength": 10, "maxLength": 600, "description": "One to three sentences. What breaks and who is harmed." },
+    "root_cause": { "type": "string", "maxLength": 400, "description": "One sentence, code-level. Required for FINDING." },
+    "path": {
+      "type": "string",
+      "minLength": 5,
+      "description": "caller -> function -> state change -> impact. A concrete call chain, not a category."
+    },
+
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "REQUIRED for kind=FINDING. Absent or empty => the record MUST be emitted as LEAD.",
+      "properties": {
+        "kind": { "enum": ["numeric-trace", "state-sequence", "quoted-code", "counterexample"] },
+        "content": { "type": "string", "minLength": 20 },
+        "values": {
+          "type": "object",
+          "description": "Named concrete inputs/intermediates, e.g. {\"amount\": \"1e6\", \"fee\": \"0\"}. Free-form.",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["kind", "content"]
+    },
+
+    "fix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "summary"],
+      "description": "One fix per record. Distinct fixes for the same (contract, function) MUST arrive as separate records or in `alternatives` - never collapsed into prose.",
+      "properties": {
+        "label": {
+          "enum": ["validate", "restrict", "allow-and-handle", "ban-path", "reorder", "round-direction", "redesign"],
+          "description": "Fix taxonomy. The reducer treats different labels as automatically distinct fixes."
+        },
+        "summary": { "type": "string", "minLength": 5, "maxLength": 300 },
+        "diff": { "type": "string", "description": "Unified diff body. `-` and `+` lines only, no file headers required." },
+        "add_lines": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The `+` lines alone, normalized. The reducer hashes these to decide fix distinctness mechanically instead of asking an LLM."
+        }
+      }
+    },
+    "alternatives": {
+      "type": "array",
+      "items": { "$ref": "#/properties/fix" },
+      "description": "Additional distinct fixes the same agent considered. Preserved verbatim through reduction."
+    },
+
+    "devils_advocate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["guards", "reentrancy", "access", "by_design", "economic", "dry_run", "verdict"],
+      "description": "The six-dimension DA record. Every dimension needs a one-line note AND a machine verdict.",
+      "properties": {
+        "guards": { "$ref": "#/$defs/daDimension" },
+        "reentrancy": { "$ref": "#/$defs/daDimension" },
+        "access": { "$ref": "#/$defs/daDimension" },
+        "by_design": { "$ref": "#/$defs/daDimension" },
+        "economic": { "$ref": "#/$defs/daDimension" },
+        "dry_run": { "$ref": "#/$defs/daDimension" },
+        "verdict": {
+          "enum": ["survives", "demote-to-lead", "discard"],
+          "description": "Agent's own call after running all six. Any dimension with blocks=true and no stated bypass MUST NOT produce 'survives'."
+        }
+      }
+    },
+
+    "poc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "description": "REQUIRED when severity_claim is medium/high/critical.",
+      "properties": {
+        "status": { "enum": ["sketch", "compiled", "passing", "not-feasible"] },
+        "framework": { "enum": ["foundry", "hardhat", "halmos", "echidna", "medusa", "certora", "none"] },
+        "code": { "type": "string", "description": "Test source. For status=compiled/passing this MUST be the exact source that was run." },
+        "command": { "type": "string", "description": "Exact command used, e.g. 'forge test --match-test testExploit -vvv'." },
+        "result": { "type": "string", "description": "Observed output summary for status=compiled/passing." },
+        "why_not": { "type": "string", "description": "REQUIRED when status='not-feasible'. Must be code-grounded, not 'no time'." }
+      }
+    },
+
+    "seam": { "type": "string", "description": "Gap-hunter only: which two or three lenses combine." },
+    "guard_gap": { "type": "string", "description": "Access-control only: the missing guard plus the parallel function that has it." },
+
+    "corroboration": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Populated by the reducer, not the agent. Agent ids that independently reported the same group_key."
+    },
+
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Populated by the adversarial verifier in the VERIFY phase. Agents MUST NOT write this.",
+      "properties": {
+        "verifier_verdict": { "enum": ["CONFIRMED", "WEAKENED", "REFUTED", "UNREACHABLE-CODE", "NOT-RUN"] },
+        "refutation": { "type": "string", "description": "The strongest counter-argument found, always recorded - even when the finding survives." },
+        "counter_evidence": { "type": "string", "description": "Quoted code or trace supporting the refutation." },
+        "iterations": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "residual_risk": { "type": "string", "description": "What remains true even if the headline claim was refuted. Often becomes a LEAD." }
+      }
+    },
+
+    "judgment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Populated by the JUDGE phase.",
+      "properties": {
+        "gate1_reachability": { "$ref": "#/$defs/gateVerdict" },
+        "gate2_impact": { "$ref": "#/$defs/gateVerdict" },
+        "gate3_code_defect": { "$ref": "#/$defs/gateVerdict" },
+        "gate4_fixability": { "$ref": "#/$defs/gateVerdict" },
+        "admin_amplifier": { "enum": ["not-applicable", "race", "retroactive-sweep", "asymmetric-formula", "access-gap", "none-named"] },
+        "final_severity": { "enum": ["critical", "high", "medium", "low", "informational", "rejected"] },
+        "confidence": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Computed by confidence.md formula. Never hand-picked." },
+        "rationale": { "type": "string", "maxLength": 400 }
+      }
+    },
+
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional per-record observability. The orchestrator aggregates these into run.json.",
+      "properties": {
+        "model_tier": { "enum": ["triage", "deep", "verify"] },
+        "markers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "feynman": { "type": "integer", "minimum": 0 },
+            "socratic": { "type": "integer", "minimum": 0 },
+            "inversion": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "daDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["note", "blocks"],
+      "properties": {
+        "note": { "type": "string", "minLength": 5, "maxLength": 300 },
+        "blocks": { "type": "boolean", "description": "true = this dimension materially blocks exploitation." },
+        "bypass": { "type": "string", "description": "Required when blocks=true but the agent still claims the finding survives. Must name the concrete bypass." }
+      }
+    },
+    "gateVerdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "note"],
+      "properties": {
+        "verdict": { "enum": ["ALLOWS", "BLOCKS", "IRRELEVANT", "UNCERTAIN"] },
+        "note": { "type": "string", "maxLength": 300 }
+      }
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "FINDING" } }, "required": ["kind"] },
+      "then": { "required": ["proof", "root_cause", "axes"] }
+    },
+    {
+      "if": {
+        "properties": { "severity_claim": { "enum": ["medium", "high", "critical"] } },
+        "required": ["severity_claim"]
+      },
+      "then": { "required": ["poc"] }
+    }
+  ]
+}
