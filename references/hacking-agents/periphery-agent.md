@@ -25,3 +25,26 @@ For every public/external function in target contracts:
 - **Read oracle in same block as deposit.** Lending or vault wrappers reading an external oracle in the same block as a write are stale; an attacker manipulates the oracle in the prior block and the wrapper accepts the manipulated value.
 - **Manipulate single-block oracles.** Wrappers reading a spot price (`slot0`, single-source feed) in the same transaction as a deposit/liquidation accept attacker-set values; the wrapper appears to validate but the validation is itself single-block.
 - **Trust divergence-check dead code.** A "safety check" comparing two values uses unreachable comparators (divergence threshold > max possible divergence); the gate is dead code masquerading as protection.
+
+## Output fields
+
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"proof": {"kind": "state-sequence", "content": "the integration boundary and the assumption that fails across it"}
+```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

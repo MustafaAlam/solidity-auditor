@@ -1,4 +1,4 @@
-# solidity-auditor v3.0.0
+# solidity-auditor v3.1.0
 
 A production multi-agent system for Solidity security auditing. Ships as a
 Claude skill and as a deployable service running the same graph.
@@ -13,15 +13,15 @@ PREFLIGHT → INGEST → MAP → [human gate] → ROUTE → HUNT → VERIFY
 ```
 SKILL.md                  the orchestrator — start here
 CHANGELOG.md              what changed from v2.7 and why
-MIGRATION.md              dropping your existing agent files in
+MIGRATION.md              what changes when you move off v2.7
 VERSION
 
 references/
   orchestration/          routing, verification, reliability, judging,
                           confidence, observability, report format, prompts
   schemas/                finding, system map, run manifest (JSON Schema)
-  scripts/                validate_findings.py, reduce.py, render_report.py
-  hacking-agents/         the SOP, shared rules, and every specialty lens
+  scripts/                check_lenses.py, validate_findings.py, reduce.py, render_report.py
+  hacking-agents/         the SOP, shared rules, MANIFEST.json, and all 30 lenses
   evals/                  corpus manifest, ground truth format, score.py
 
 service/                  the deployable twin — FastAPI, A2A, Cloud Run, ADK
@@ -29,8 +29,8 @@ service/                  the deployable twin — FastAPI, A2A, Cloud Run, ADK
 
 ## Quick start — as a skill
 
-Install the bundle as a skill, copy your v2.7 specialty files in per
-`MIGRATION.md`, then:
+Install the bundle as a skill. All 30 lenses are already inside — nothing to
+copy. Then:
 
 ```
 audit
@@ -43,7 +43,7 @@ audit --diff HEAD~1 --yes            # CI mode
 ```bash
 cd service
 pip install -e '.[server,anthropic,dev]'
-pytest -q                                          # 44 tests, offline
+pytest -q                                          # 81 tests, offline
 python -m audit_mas.cli roster ./contracts         # see the routing decision
 python -m audit_mas.cli audit  ./contracts --budget standard
 ```
@@ -67,8 +67,9 @@ completeness and coverage are code. Confidence is a formula. Severity is clamped
 by confidence.
 
 **Visible failure.** Per-agent status, one retry, quorum, DEGRADED banners, a
-run manifest with cost and coverage, and a hard refusal to render a report from
-a half-dead fan-out.
+run manifest with real token cost and coverage, and a hard refusal to render a
+report from a half-dead fan-out — or to start one where any agent would hunt
+without a lens.
 
 ## Before changing anything
 

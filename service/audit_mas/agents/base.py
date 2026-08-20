@@ -43,10 +43,31 @@ DEFAULT_MODELS: dict[ModelTier, str] = {
 }
 
 
+@dataclass
+class Completion:
+    """Text plus what it cost.
+
+    v3.0.0 defined `cost.input_tokens` and `context_amplification` in the run
+    manifest and never populated either, which meant the headline claim about
+    routing cutting context amplification was unmeasured. Usage travels with the
+    response so it cannot be forgotten - and it is per-call rather than an
+    attribute on the provider, because concurrent agents share one provider
+    instance and a mutable `last_usage` would race.
+    """
+
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
+
+    def __str__(self) -> str:  # keeps `str(completion)` honest in logs
+        return self.text
+
+
 class LLMProvider(Protocol):
     """One method. That is the whole contract."""
 
-    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> str: ...
+    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> Completion: ...
 
 
 @dataclass
@@ -59,11 +80,44 @@ class AgentResult:
     attempts: int = 0
     duration_s: float = 0.0
     error: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
 
 
 def load_reference(*parts: str) -> str:
     path = REFERENCES.joinpath(*parts)
     return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+class MissingLensError(RuntimeError):
+    """Raised when a routed agent has no specialty file.
+
+    This used to be a silent empty string. An agent with no lens still returns
+    findings, still reports ok, and still counts toward quorum - its silence on
+    the bug it was meant to catch is indistinguishable from a clean result.
+    Failing loudly at prompt-assembly time is the whole point.
+    """
+
+
+MIN_SPECIALTY_BYTES = 400
+
+
+def load_specialty(agent_id: str) -> str:
+    """Load an agent's lens, or raise. Never returns empty."""
+    for candidate in (f"{agent_id}-agent.md", f"{agent_id}.md"):
+        text = load_reference("hacking-agents", candidate)
+        if len(text) >= MIN_SPECIALTY_BYTES:
+            return text
+        if text:
+            raise MissingLensError(
+                f"{candidate} exists but is {len(text)}B - below the {MIN_SPECIALTY_BYTES}B "
+                f"floor, so '{agent_id}' would hunt with an effectively empty lens."
+            )
+    raise MissingLensError(
+        f"No specialty file for '{agent_id}' in {REFERENCES / 'hacking-agents'}. "
+        f"Expected {agent_id}-agent.md. Run scripts/check_lenses.py for the full list."
+    )
 
 
 def build_system_prompt(spec: AgentSpec) -> str:
@@ -72,14 +126,13 @@ def build_system_prompt(spec: AgentSpec) -> str:
     Bundle order matters: how to think, then what to look for, then how to
     report. Reversing it puts output formatting in front of method and reliably
     produces well-formatted shallow work.
+
+    Raises MissingLensError rather than assembling a prompt with no lens in it.
     """
-    specialty = load_reference("hacking-agents", f"{spec.agent_id}-agent.md")
-    if not specialty:
-        specialty = load_reference("hacking-agents", f"{spec.agent_id}.md")
     return "\n\n---\n\n".join(
         part for part in (
             load_reference("hacking-agents", "senior-auditor-sop.md"),
-            specialty,
+            load_specialty(spec.agent_id),
             load_reference("hacking-agents", "shared-rules.md"),
         ) if part
     )
@@ -176,14 +229,20 @@ class HuntAgent:
 
     async def run(self, bundle: str, system_map_json: str) -> AgentResult:
         result = AgentResult(agent_id=self.spec.agent_id)
-        system = build_system_prompt(self.spec)
-        prompt = self._prompt(bundle, system_map_json)
         started = time.monotonic()
+        try:
+            system = build_system_prompt(self.spec)
+        except MissingLensError as exc:
+            # Fail this agent loudly rather than letting it hunt with no lens.
+            result.status, result.error = "failed", f"missing lens: {exc}"
+            result.duration_s = round(time.monotonic() - started, 2)
+            return result
+        prompt = self._prompt(bundle, system_map_json)
 
         for attempt in (1, 2):  # one retry, ever
             result.attempts = attempt
             try:
-                text = await asyncio.wait_for(
+                completion = await asyncio.wait_for(
                     self.provider.complete(
                         system=system, prompt=prompt, model=self._model(), max_tokens=self.max_tokens
                     ),
@@ -196,6 +255,12 @@ class HuntAgent:
                 result.status, result.error = "failed", f"{type(exc).__name__}: {exc}"
                 continue
 
+            text = completion.text
+            # Usage accumulates across attempts: a retry costs real money even
+            # when the first attempt produced nothing usable.
+            result.input_tokens += completion.input_tokens
+            result.output_tokens += completion.output_tokens
+            result.cached_input_tokens += completion.cached_input_tokens
             result.raw_text = text
             result.markers = count_markers(text)
             result.records = extract_records(text)
@@ -221,9 +286,16 @@ class StubProvider:
         self.default = default
         self.calls: list[dict] = []
 
-    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> str:
+    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> Completion:
         self.calls.append({"model": model, "prompt_len": len(prompt), "system_len": len(system)})
+        text = self.default
         for key, response in self.responses.items():
             if key in system or key in prompt:
-                return response
-        return self.default
+                text = response
+                break
+        # Rough but non-zero, so cost aggregation is exercised offline.
+        return Completion(
+            text=text,
+            input_tokens=(len(system) + len(prompt)) // 4,
+            output_tokens=len(text) // 4,
+        )

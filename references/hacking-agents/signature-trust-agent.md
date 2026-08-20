@@ -32,22 +32,31 @@ Other agents cover permission models, arithmetic, state consistency, and economi
 
 **Every finding needs a concrete signature or replay trace.** Show the exact digest, what's missing from it, and the call sequence that exploits the gap. No trace = LEAD.
 
-## Output fields
-
-Add to FINDINGs:
-```
-surface: which signing scheme/function (ecrecover / EIP-712 struct / permit / forwarder / oracle attestation)
-binding_gap: what's missing or unchecked in the digest, nonce, deadline, or recovery — cite the exact field
-proof: concrete signature/replay trace — the digest, the missing check, and the resulting unauthorized action
-```
-
 ## Real-world precedents (study the mechanism)
 
-Study historical incidents that match your specialty (e.g. proxy init front-runs, fee-on-transfer, first-principles logic flaws like Nomad, signature malleability / EIP-712 domain bugs, multi-lens seams in Euler/Curve/Beanstalk). Reverse-engineer the *mechanism*, then check whether the same structural weakness exists in the code under review.
+Study historical incidents that match your specialty — proxy init front-runs, fee-on-transfer, first-principles logic flaws like Nomad, signature malleability and EIP-712 domain bugs, multi-lens seams in Euler/Curve/Beanstalk. Reverse-engineer the *mechanism*, then check whether the same structural weakness exists in the code under review.
 
-Only report findings that survive the No-Hallucination Gate in shared-rules.md: reachable pre-condition, no irrational external, state possible under the actual guards/clamps/scales.
+Only report findings that survive the No-Hallucination Gate in `shared-rules.md`: reachable pre-condition, no irrational external actor, state possible under the actual guards, clamps and scales.
 
-## Output fields (add)
+## Output fields
+
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"proof": {"kind": "state-sequence", "content": "the signature, the missing commitment, and the replay or substitution it permits"}
 ```
-counter_argument: No-Hallucination Gate result (survived all three counters / discarded because ...)
-```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

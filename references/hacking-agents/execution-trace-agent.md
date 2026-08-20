@@ -23,6 +23,30 @@ Other agents cover known patterns, arithmetic, permissions, economics, invariant
 - **Dependency swap.** Swap an external dependency while a callback from the old one is still pending.
 - **Approval residuals.** Exploit leftover allowance when approved amount exceeds consumed amount.
 
+## Across time windows
+
+- **Straddle the boundary between phases.** When the design has sequential windows (request then claim, withdrawal then payout, lock then unlock), find the block where two windows are simultaneously open. Compare every `>=` against every `>` on the shared boundary — an inclusive comparator on both sides of a boundary means both phases accept it.
+- **Act in the window the design assumes is empty.** Between the close of one phase and the open of the next, ask what state is half-updated and which function will read it.
+
 ## Output fields
 
-Add to FINDINGs:
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"proof": {"kind": "state-sequence", "content": "the ordered trace - each frame, what state it reads, what it writes"}
+```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

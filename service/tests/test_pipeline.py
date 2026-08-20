@@ -247,7 +247,7 @@ def test_markers_are_counted(stub_hunt_response):
     assert markers == {"feynman": 1, "socratic": 1, "inversion": 1}
 
 
-def test_agent_retries_once_then_gives_up():
+def test_agent_retries_once_then_gives_up(stub_lenses):
     provider = StubProvider(default="no json here, sorry")
     agent = HuntAgent(AgentSpec(agent_id="access-control", role="lane", spawn_reason="test"), provider)
     result = asyncio.run(agent.run("contract C {}", "{}"))
@@ -255,7 +255,7 @@ def test_agent_retries_once_then_gives_up():
     assert result.status == "invalid-output"
 
 
-def test_agent_succeeds_on_first_attempt(stub_hunt_response):
+def test_agent_succeeds_on_first_attempt(stub_hunt_response, stub_lenses):
     provider = StubProvider(default=stub_hunt_response)
     agent = HuntAgent(AgentSpec(agent_id="access-control", role="lane", spawn_reason="test"), provider)
     result = asyncio.run(agent.run("contract C {}", "{}"))
@@ -300,7 +300,7 @@ def _map_for(source_root: pathlib.Path) -> tuple[SystemMap, dict[str, str]]:
     return build_system_map(source_root)
 
 
-def test_full_run_produces_artifacts(tmp_path, vulnerable_source, stub_hunt_response):
+def test_full_run_produces_artifacts(tmp_path, vulnerable_source, stub_hunt_response, stub_lenses):
     smap, sources = _map_for(vulnerable_source)
     smap.hot_functions = [
         HotFunction(contract="Vault", function="withdraw", risk_weight=0.9),
@@ -326,7 +326,7 @@ def test_full_run_produces_artifacts(tmp_path, vulnerable_source, stub_hunt_resp
     assert result["coverage"]["hot_function_axis_pairs"] > 0
 
 
-def test_dead_fanout_aborts_instead_of_reporting(tmp_path, vulnerable_source):
+def test_dead_fanout_aborts_instead_of_reporting(tmp_path, vulnerable_source, stub_lenses):
     """A half-dead run's absences read as clean bills of health. Refuse to render."""
     smap, sources = _map_for(vulnerable_source)
     orch = Orchestrator(StubProvider(default="total garbage, no json"), tmp_path / "run", budget="quick")
@@ -335,7 +335,7 @@ def test_dead_fanout_aborts_instead_of_reporting(tmp_path, vulnerable_source):
     assert "clean bill of health" in result["reason"]
 
 
-def test_manifest_survives_a_failed_run(tmp_path, vulnerable_source):
+def test_manifest_survives_a_failed_run(tmp_path, vulnerable_source, stub_lenses):
     smap, sources = _map_for(vulnerable_source)
     orch = Orchestrator(StubProvider(default="garbage"), tmp_path / "run", budget="quick")
     asyncio.run(orch.run(smap, {"full": build_bundle(sources)}, {}))

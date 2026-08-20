@@ -44,8 +44,10 @@ Do not run a full prover in this pass unless Certora/Halmos is already configure
 | No stuck funds | Prove a withdrawal/claim path exists for every successful deposit/request |
 | Solvency | `totalAssets() >= claims` with `preserved` blocks on mint/deposit |
 | Preview ≡ write | `previewDeposit(x) == deposit(x)` (or documented rounding bound) |
+| Dual-dimension consistency | Ghost per aggregate pool plus ghost per individual entitlement; assert the two move together on every mutator |
+| Disjoint phases | `!(withdrawOpen(t) && payoutOpen(t))` as a parametric rule over the timestamp |
 
-## Sketch fragments (use in proof / PROP-GAP)
+## Sketch fragments
 
 Ghost + hook + invariant:
 
@@ -81,16 +83,30 @@ function check_DepositRedeemRoundTrip(uint256 assets) public {
 }
 ```
 
+A FINDING requires a source-grounded counterexample — values, writers, and the function that breaks the property. A LEAD is an unenforced load-bearing property, or a CE you could not close. Do not emit a spec catalog as a finding.
+
+Record the property in English plus formal-ish form, its class (safety / liveness / functional), the counterexample or `PROP-GAP`, and the suggested tool.
+
 ## Output fields
 
-Add to FINDINGs / LEADs (plus the shared-rules schema):
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
 
-```
-domain: formal
-property: English statement + formal-ish (invariant / rule / check_)
-class: safety | liveness | functional
-counterexample: concrete path, or PROP-GAP
-suggested_tool: Certora | Halmos | Foundry
+Alongside the required fields, records from this lens set:
+
+```json
+"domain": "formal",
+"proof": {"kind": "counterexample", "content": "the property and the counterexample that violates it"}
 ```
 
-A FINDING requires a source-grounded counterexample (values, writers, the function that breaks the property). A LEAD is an unenforced load-bearing property or a CE you could not close. Do not emit a spec catalog as a finding.
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

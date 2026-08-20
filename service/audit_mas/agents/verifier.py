@@ -43,6 +43,9 @@ class AdversarialVerifier:
         self.max_iterations = max_iterations
         self.timeout_s = timeout_s
         self.system = load_reference("hacking-agents", "adversarial-verifier-agent.md")
+        # Verification is a real slice of the bill; the manifest should say so.
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     def _prompt(self, finding: Finding, code_slice: str) -> str:
         claim = finding.model_dump(
@@ -67,7 +70,7 @@ class AdversarialVerifier:
         for iteration in range(1, self.max_iterations + 1):
             verification.iterations = iteration
             try:
-                text = await asyncio.wait_for(
+                completion = await asyncio.wait_for(
                     self.provider.complete(
                         system=self.system,
                         prompt=self._prompt(finding, code_slice),
@@ -81,7 +84,9 @@ class AdversarialVerifier:
                 verification.refutation = "Verifier did not complete; treat this finding as unverified."
                 return verification
 
-            parsed = _parse_verdict(text)
+            self.input_tokens += completion.input_tokens
+            self.output_tokens += completion.output_tokens
+            parsed = _parse_verdict(completion.text)
             if parsed is None:
                 continue
 
@@ -141,6 +146,8 @@ class AdversarialVerifier:
             "unreachable": tally["UNREACHABLE-CODE"],
             "not_run": tally["NOT-RUN"],
             "duration_s": round(time.monotonic() - started, 2),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
         }
 
 

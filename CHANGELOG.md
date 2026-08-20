@@ -1,5 +1,57 @@
 # Changelog
 
+## 3.1.0 — the lenses, the gates, the transport, the bill
+
+Four defects in 3.0.0, three of which made the system look healthier than it was.
+
+**All 30 lenses now ship.** 3.0.0 shipped 5 specialty files for 30 routable
+agents. `build_system_prompt` returned an empty string for a missing lens, the
+empty section was filtered out of the bundle, and 25 agents hunted with the SOP,
+the shared rules, and nothing else — producing plausible generic findings while
+the manifest recorded `status: ok`. A crashed agent is obvious; a blind one is
+not, and its silence on the bug it was meant to catch reads as a clean result.
+
+The 25 v2.7 lenses are ported in (their truncated `Add to FINDINGs:` tails
+replaced with the v3 JSON contract). `MANIFEST.json` declares all 30,
+`scripts/check_lenses.py` runs in PREFLIGHT before a token is spent,
+`load_specialty()` raises `MissingLensError` instead of returning empty, and a
+blind core lane aborts the run outright. `tests/test_lens_coverage.py` asserts
+the relationship between what the router can spawn and what exists on disk —
+the test whose absence let this ship.
+
+**The four judging gates actually run.** 3.0.0 documented four gates in fixed
+order and shipped a service whose JUDGE phase applied two operations:
+REFUTED→rejected and a confidence clamp. `judgment.gate1_reachability` and its
+siblings were never populated. `core/judging.py` now evaluates all four plus the
+admin-amplifier rule, deriving each verdict from evidence already in the record
+and returning `UNCERTAIN` (= ALLOWS, per `judging.md`) where it honestly cannot —
+failing open toward reporting, which is the right bias. An `overrides` argument
+lets an LLM judge supply the gates that need real reasoning.
+
+**A2A is reachable.** `RemoteHuntAgent` was complete and never constructed;
+the orchestrator always built the in-process worker, so the A2A path was dead
+code behind a README that described it as working. Transport is now selected per
+agent: `auto` goes remote when an agent card is published, `remote` refuses to
+fall back silently — because a misconfigured deployment that quietly runs local
+looks exactly like a working one. Each agent's transport is recorded in the
+manifest.
+
+**Token accounting is real.** `cost.input_tokens` and `context_amplification`
+were schema fields nothing wrote, which left this project's headline efficiency
+claim unmeasured. Providers now return a `Completion` carrying usage, it
+accumulates across retries, and the orchestrator aggregates it and divides by
+source size. Amplification is `null` with a stated reason when source size is
+unknown, rather than a number nothing backs.
+
+**Temporal and dual-accounting coverage.** Prompted by a real miss — a vault
+where claiming consumed an individual entitlement without moving the period
+pool, and where two lifecycle windows could be open in the same block. Both
+patterns are now explicit in `invariant`, `asymmetry`, `flow-gap`,
+`execution-trace`, `yield-strategist`, `lending-expert`, `tokenomics-analyst`,
+`invariant-tester`, `fuzzer`, `formal-verifier` and `poc-writer`.
+
+81 tests, all offline. Lint clean.
+
 ## 3.0.0 — production multi-agent system
 
 v2.7 was a strong hunting system with no engineering around it. The specialty

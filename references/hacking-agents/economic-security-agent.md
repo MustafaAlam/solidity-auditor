@@ -25,8 +25,30 @@ Other agents cover known patterns, logic/state, access control, and arithmetic. 
 
 **Weaponize legitimate features.** Use the protocol's own mechanisms against it: deposit liquidity to make governance thresholds unreachable, trigger intentional reverts to poison refund records, choose which provider fulfills a pending request.
 
+**Double-count an entitlement across dimensions.** When a claim decrements a per-user balance but not the aggregate pool it was drawn from, the pool over-reports what is available. Buy the residual: claim, then act on the stale aggregate before anything reconciles it. Show the numbers on both dimensions.
+
 **Every finding needs concrete economics.** Show who profits, how much, at what cost. No numbers = LEAD.
 
 ## Output fields
 
-Add to FINDINGs:
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"domain": "tokenomics",
+"proof": {"kind": "numeric-trace", "content": "attacker cost, attacker gain, and the net at realistic scale"}
+```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

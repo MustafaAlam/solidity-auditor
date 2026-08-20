@@ -22,6 +22,8 @@ Other agents cover generic economics, access control, and invariants. You own **
 
 **Fees.** Originator fee withholding, servicer fees, misc fees — find double-withdrawal, fee charged without corresponding cash, fee that reduces investor principal incorrectly.
 
+**Individual entitlement vs pool.** A per-investor claim and the period or tranche pool it draws from are two accounting dimensions of the same money. Enumerate every function that writes either. A claim that consumes the individual entitlement without decrementing the pool leaves the pool over-stating what remains — and the next claimant is paid from money that is already spoken for. Prove it with both numbers, before and after.
+
 ## Method
 
 1. Map loan statuses, entry types, and account chart (if double-entry).
@@ -29,10 +31,28 @@ Other agents cover generic economics, access control, and invariants. You own **
 3. Construct sequences: fund → disburse → accrue → pay → withdraw; insert NFT transfer / exchange / cancel mid-path.
 4. Prove conservation breaks or entitlement theft with concrete numbers.
 
+Record the lifecycle step (originate / fund / disburse / accrue / pay / withdraw / terminal), the parties involved, and the account or status fields that diverge.
+
 ## Output fields
 
-Add to FINDINGs / LEADs:
-- `domain: lending`
-- lifecycle step (originate / fund / disburse / accrue / pay / withdraw / terminal)
-- parties involved (borrower / originator / servicer / investor / exchange)
-- account or status fields that diverge
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"domain": "lending",
+"proof": {"kind": "numeric-trace", "content": "position, prices, and the accounting that leaves the protocol short"}
+```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

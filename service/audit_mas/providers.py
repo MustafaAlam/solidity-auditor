@@ -1,5 +1,8 @@
 """LLM providers.
 
+Each returns a `Completion` carrying text plus token usage, so the run manifest's
+cost block is populated from what actually happened rather than left empty.
+
 Each satisfies the one-method ``LLMProvider`` protocol. Imports are lazy and
 local so the package installs and tests without any vendor SDK present.
 """
@@ -7,6 +10,8 @@ local so the package installs and tests without any vendor SDK present.
 from __future__ import annotations
 
 import os
+
+from .agents.base import Completion
 
 
 class AnthropicProvider:
@@ -17,14 +22,20 @@ class AnthropicProvider:
 
         self.client = anthropic.AsyncAnthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
 
-    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> str:
+    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> Completion:
         resp = await self.client.messages.create(
             model=model,
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": prompt}],
         )
-        return "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
+        usage = getattr(resp, "usage", None)
+        return Completion(
+            text="".join(b.text for b in resp.content if getattr(b, "type", "") == "text"),
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cached_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+        )
 
 
 class VertexProvider:
@@ -39,7 +50,7 @@ class VertexProvider:
             location=location or os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
         )
 
-    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> str:
+    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> Completion:
         from google.genai import types
 
         resp = await self.client.aio.models.generate_content(
@@ -50,7 +61,13 @@ class VertexProvider:
                 max_output_tokens=max_tokens,
             ),
         )
-        return resp.text or ""
+        usage = getattr(resp, "usage_metadata", None)
+        return Completion(
+            text=resp.text or "",
+            input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
+            output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
+            cached_input_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
+        )
 
 
 class OpenAICompatibleProvider:
@@ -68,13 +85,18 @@ class OpenAICompatibleProvider:
             api_key=api_key or os.environ.get("OPENAI_API_KEY", "not-needed"),
         )
 
-    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> str:
+    async def complete(self, *, system: str, prompt: str, model: str, max_tokens: int) -> Completion:
         resp = await self.client.chat.completions.create(
             model=model,
             max_tokens=max_tokens,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         )
-        return resp.choices[0].message.content or ""
+        usage = getattr(resp, "usage", None)
+        return Completion(
+            text=resp.choices[0].message.content or "",
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
 
 
 def from_env():

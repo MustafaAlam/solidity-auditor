@@ -19,20 +19,25 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import logging
 import pathlib
 import time
 import uuid
 
-from .agents.base import AgentResult, HuntAgent, LLMProvider
+from .a2a_client import RemoteHuntAgent, card_url_for, discover
+from .agents.base import AgentResult, HuntAgent, LLMProvider, MissingLensError, load_specialty
 from .agents.verifier import AdversarialVerifier
+from .core.judging import judge
 from .core.ledger import Ledger
-from .core.reduction import axis_coverage, reduce_findings, severity_cap
+from .core.reduction import axis_coverage, reduce_findings
 from .core.router import CORE, build_roster, verify_iterations
 from .schemas import AgentRun, Quorum, Roster, RunManifest, SystemMap
 
 CORE_IDS = {a for a, _ in CORE}
 QUORUM_THRESHOLD = 0.8
 ABORT_THRESHOLD = 0.5
+
+log = logging.getLogger(__name__)
 
 TIMEOUTS = {"quick": 180.0, "standard": 480.0, "deep": 900.0, "exhaustive": 1800.0}
 
@@ -50,6 +55,7 @@ class Orchestrator:
         budget: str = "standard",
         run_id: str | None = None,
         max_concurrency: int = 10,
+        transport: str = "auto",
     ):
         self.provider = provider
         self.budget = budget
@@ -58,6 +64,15 @@ class Orchestrator:
         self.run_id = run_id or f"audit-{uuid.uuid4().hex[:8]}"
         self.ledger = Ledger(self.workdir / "ledger")
         self.max_concurrency = max_concurrency
+        self.blind_agents: list[str] = []
+        # "auto"   - remote when an agent card is published for that agent, else local
+        # "local"  - always in-process
+        # "remote" - always over A2A; an agent with no card is an error, not a
+        #            silent fallback, because a silent fallback makes a
+        #            misconfigured deployment look like a working one
+        self.transport = transport
+        self.remote_cards: dict[str, str] = discover() if transport in {"auto", "remote"} else {}
+        self.source_tokens = 0
         self.manifest = RunManifest(
             run_id=self.run_id,
             started_at=_now(),
@@ -85,10 +100,26 @@ class Orchestrator:
         )
 
     # -- phases ---------------------------------------------------------
+    def _lens_check(self, roster: Roster) -> list[str]:
+        """Find routed agents with no specialty file, before spending anything.
+
+        This runs at ROUTE rather than at spawn because the cheapest moment to
+        discover that half the roster is blind is before the first token.
+        """
+        blind: list[str] = []
+        for spec in roster.agents:
+            try:
+                load_specialty(spec.agent_id)
+            except MissingLensError as exc:
+                blind.append(spec.agent_id)
+                log.warning("no lens for %s: %s", spec.agent_id, exc)
+        return blind
+
     def route(self, system_map: SystemMap) -> Roster:
         started = time.monotonic()
         roster = build_roster(system_map, self.budget)
         (self.workdir / "roster.json").write_text(roster.model_dump_json(indent=2), encoding="utf-8")
+        self.blind_agents = self._lens_check(roster)
         for spec in roster.agents:
             self.manifest.agents.append(
                 AgentRun(
@@ -114,17 +145,35 @@ class Orchestrator:
         sem = asyncio.Semaphore(self.max_concurrency)
         timeout = TIMEOUTS.get(self.budget, 480.0)
 
+        def _worker(spec):
+            """Remote or local, behind one interface.
+
+            RemoteHuntAgent matches HuntAgent's signature exactly, so the phase
+            graph never learns which transport it got. In v3.0.0 the remote path
+            existed and nothing ever constructed it - this is where that gets
+            decided.
+            """
+            url = self.remote_cards.get(spec.agent_id) or card_url_for(spec.agent_id)
+            if url and self.transport in {"auto", "remote"}:
+                return RemoteHuntAgent(spec, url, timeout_s=timeout), "a2a"
+            if self.transport == "remote":
+                raise RuntimeError(
+                    f"transport=remote but no agent card for '{spec.agent_id}'. "
+                    f"Set AGENT_CARD_URL_{spec.agent_id.upper().replace('-', '_')} or use transport=auto."
+                )
+            return HuntAgent(spec, self.provider, timeout_s=timeout), "local"
+
         async def run_one(spec) -> AgentResult:
             async with sem:
-                agent = HuntAgent(spec, self.provider, timeout_s=timeout)
+                agent, kind = _worker(spec)
+                by_id[spec.agent_id].transport = kind
                 bundle = bundles.get(spec.agent_id) or bundles.get("full", "")
                 return await agent.run(bundle, smap_json)
 
+        by_id = {a.agent_id: a for a in self.manifest.agents}
         results = await asyncio.gather(
             *(run_one(spec) for spec in roster.agents), return_exceptions=True
         )
-
-        by_id = {a.agent_id: a for a in self.manifest.agents}
         returned_valid = 0
 
         for spec, result in zip(roster.agents, results, strict=True):
@@ -137,6 +186,9 @@ class Orchestrator:
             entry.duration_s = result.duration_s
             entry.markers = result.markers
             entry.records_emitted = len(result.records)
+            entry.input_tokens = result.input_tokens
+            entry.output_tokens = result.output_tokens
+            entry.cached_input_tokens = result.cached_input_tokens
 
             accepted, rejected, _ = self.ledger.append_many(spec.agent_id, result.records)
             entry.records_valid = accepted
@@ -174,6 +226,37 @@ class Orchestrator:
                     f"{returned_valid}/{expected} valid" + (f"; missing core: {missing_core}" if missing_core else ""))
         return quorum
 
+    def _aggregate_cost(self) -> None:
+        """Fill the manifest cost block from what the agents actually reported.
+
+        `context_amplification` is the headline efficiency metric across
+        versions: total input tokens divided by the tokens the source itself
+        occupies. v2.7 sent full source to a fixed 25 agents, so it sat near 25x.
+        Routing and slicing are supposed to cut that, and this is the number that
+        says whether they did.
+        """
+        agents_in = sum(a.input_tokens for a in self.manifest.agents)
+        agents_out = sum(a.output_tokens for a in self.manifest.agents)
+        cached = sum(a.cached_input_tokens for a in self.manifest.agents)
+
+        verify_in = int(self.manifest.verification.get("input_tokens", 0) or 0)
+        verify_out = int(self.manifest.verification.get("output_tokens", 0) or 0)
+
+        total_in = agents_in + verify_in
+        cost = {
+            "input_tokens": total_in,
+            "output_tokens": agents_out + verify_out,
+            "cached_input_tokens": cached,
+        }
+        if self.source_tokens:
+            cost["source_tokens"] = self.source_tokens
+            cost["context_amplification"] = round(total_in / self.source_tokens, 2)
+        else:
+            # Say so rather than reporting a number nothing backs.
+            cost["context_amplification"] = None
+            cost["note"] = "source_tokens unknown; amplification not computed"
+        self.manifest.cost = cost
+
     async def verify(self, slices: dict[str, str]) -> dict:
         started = time.monotonic()
         findings = self.ledger.read_all()
@@ -206,18 +289,12 @@ class Orchestrator:
             for k in ("unique_contract_function_raw", "unique_contract_function_final")
         }}
 
-        # JUDGE: refutation is terminal; everything else gets its severity
-        # clamped by the confidence the pipeline actually computed.
+        # JUDGE: all four gates in fixed order, then the admin-amplifier rule,
+        # then a severity assignment bounded by the computed confidence.
         for rec in result["reduced"]:
-            conf = int(rec["judgment"]["confidence"])
-            verdict = (rec.get("verification") or {}).get("verifier_verdict", "NOT-RUN")
-            if verdict == "REFUTED":
-                rec["judgment"]["final_severity"] = "rejected"
-                rec["judgment"]["rationale"] = "Refuted by the adversarial verifier."
-            else:
-                rec["judgment"]["final_severity"] = severity_cap(rec["severity_claim"], conf)
-                if rec["judgment"]["final_severity"] != rec["severity_claim"]:
-                    rec["judgment"]["rationale"] = f"Severity capped by confidence {conf}."
+            judgment = judge(rec, system_map)
+            # compute_confidence already ran in reduction; the gates never revise it.
+            rec["judgment"] = judgment.model_dump(mode="json", exclude_none=True)
 
         counts: dict[str, int] = {}
         for rec in result["reduced"]:
@@ -232,7 +309,34 @@ class Orchestrator:
     # -- driver ---------------------------------------------------------
     async def run(self, system_map: SystemMap, bundles: dict[str, str], slices: dict[str, str] | None = None) -> dict:
         self._phase("preflight", "ok")
+        # ~4 chars per token is crude, but it is applied identically across
+        # versions, so the comparison it supports stays valid.
+        full = bundles.get("full", "")
+        self.source_tokens = len(full) // 4 if full else 0
         roster = self.route(system_map)
+
+        blind_core = sorted(set(self.blind_agents) & CORE_IDS)
+        if blind_core:
+            # Every core lane applies to every contract. Running without one is
+            # not a degraded audit, it is a different and much smaller audit
+            # wearing the same report template.
+            self._phase("hunt", "failed", note=f"core lanes have no specialty file: {blind_core}")
+            self.manifest.finished_at = _now()
+            self._flush()
+            return {
+                "aborted": True,
+                "reason": (
+                    f"Core lanes {blind_core} have no specialty file, so they would hunt with no lens "
+                    "and return confident generic findings. Restore the files "
+                    "(references/hacking-agents/) and re-run; scripts/check_lenses.py lists them."
+                ),
+                "blind_agents": self.blind_agents,
+                "manifest": self.manifest.model_dump(mode="json", exclude_none=True),
+            }
+        if self.blind_agents:
+            log.warning("running DEGRADED: %d agent(s) have no lens: %s",
+                        len(self.blind_agents), self.blind_agents)
+
         quorum = await self.hunt(roster, bundles, system_map)
 
         if quorum.ratio < ABORT_THRESHOLD:
@@ -252,6 +356,7 @@ class Orchestrator:
         await self.verify(slices or {})
         result = self.reduce_and_judge(system_map)
 
+        self._aggregate_cost()
         self.manifest.finished_at = _now()
         self._phase("report", "degraded" if quorum.degraded else "ok")
         result["manifest"] = self.manifest.model_dump(mode="json", exclude_none=True)

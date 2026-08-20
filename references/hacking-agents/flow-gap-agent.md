@@ -31,6 +31,7 @@ You are here for the bugs that REQUIRE two or three of these lenses to see at on
 - Shared state written by contract X and read as ground truth by contract Y; the attacker bridges between contracts to convert phantom state (pending shares, in-flight balances) into real claims.
 - An attacker pumping a tracked value (liquidity, ticket count, share supply) past a threshold that gates parameter updates; legitimate updates revert until the value decays.
 - Cross-chain message handlers iterating over user-controlled lengths or combinatorial sets; legitimate users exceed destination-chain block gas, bricking delivery.
+- A claim path that decrements the caller's entitlement but returns before the aggregate pool it was drawn from is reconciled — the trace completes, no revert, and the protocol's "pool equals sum of entitlements" guarantee is quietly false from that block on.
 
 ## Discipline
 
@@ -40,10 +41,24 @@ Every finding needs the trace, the periphery call, and the protocol guarantee th
 
 ## Output fields
 
-Add to FINDINGs:
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"seam": "which lenses combine",
+"proof": {"kind": "state-sequence", "content": "the value path and the control path, and where they diverge"}
 ```
-seam: which two or three lenses combine (execution×periphery / periphery×first-principles / execution×first-principles / three-way)
-trace: the call sequence — internal step → periphery interaction → end state
-violated_principle: the protocol guarantee that the end state contradicts
-proof: concrete trace showing the seam
-```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

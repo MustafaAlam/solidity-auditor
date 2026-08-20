@@ -3,29 +3,31 @@
 Nothing you wrote is thrown away. The 25 specialty files, the SOP and the
 judging gates carry forward. What changed is the machinery around them.
 
-## 1. Drop in your existing agent files
+## 1. Your agent files are already in the bundle
 
-Copy every `*-agent.md` from your v2.7 `references/hacking-agents/` into the same
-directory here. They work unchanged — the router refers to them by `agent_id`,
-which is the filename minus `-agent.md`.
+All 25 v2.7 specialty lenses ship inside `references/hacking-agents/`, alongside
+the five new ones. Nothing to copy.
 
-This bundle ships the four new ones plus the rewritten `shared-rules.md`,
-`senior-auditor-sop.md` and `adversarial-verifier-agent.md`. Everything else is
-yours.
+They were ported, not merely moved: each file's trailing "Output fields / Add to
+FINDINGs:" block — truncated in several of the originals — was replaced with the
+v3 JSON contract carrying that lens's real extra fields. The hunting content is
+unchanged.
 
+`references/hacking-agents/MANIFEST.json` declares all 30, and
+`scripts/check_lenses.py` verifies every one exists and is not a stub before a
+run spends a token:
+
+```bash
+python3 references/scripts/check_lenses.py
+# Lens check: 30/30 lenses present against manifest.
 ```
-references/hacking-agents/
-  senior-auditor-sop.md          ← replaced (v3, adds a note on the verifier)
-  shared-rules.md                ← replaced (v3, JSON output contract)
-  adversarial-verifier-agent.md  ← new
-  account-abstraction-agent.md   ← new
-  proxy-upgrade-agent.md         ← new
-  transient-storage-agent.md     ← new
-  crosschain-l2-agent.md         ← new
-  access-control-agent.md        ← copy yours
-  asymmetry-agent.md             ← copy yours
-  ... all 25 from v2.7           ← copy yours
-```
+
+This check exists because v3.0.0 shipped with 5 of 30 lenses and nothing noticed.
+`build_system_prompt` returned an empty string for a missing specialty, the empty
+section was filtered out of the bundle, and 25 agents hunted with the SOP, the
+shared rules and no lens — returning confident generic findings while the
+manifest recorded `status: ok`. A blind agent looks exactly like a healthy one.
+It now raises `MissingLensError` instead, and a blind core lane aborts the run.
 
 ## 2. What moved
 

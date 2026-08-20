@@ -141,3 +141,55 @@ def stub_hunt_response(sample_records):
         "attacker uses a 1 wei probe; attacker chains through a hook.\n\n"
         f"```jsonl\n{lines}\n```\n"
     )
+
+
+@pytest.fixture
+def stub_lenses(tmp_path, monkeypatch):
+    """Give every routable agent a real-enough lens file.
+
+    Pipeline tests exercise the orchestration graph; `test_lens_coverage.py` owns
+    the question of whether real lenses are present. Without this fixture every
+    pipeline test quietly becomes a second, worse copy of that one — and when the
+    lens check was added they all failed for a reason unrelated to what they test.
+    """
+    import audit_mas.agents.base as base
+    from audit_mas.core.router import CORE, ROLE, TRIGGERS
+
+    d = tmp_path / "hacking-agents"
+    d.mkdir(parents=True)
+
+    # Comfortably above MIN_SPECIALTY_BYTES so the floor check never becomes the
+    # thing these tests are accidentally measuring.
+    filler = (
+        "You are an attacker hunting through this lens. Map the relevant surface\n"
+        "first, then attack every gap the map exposes.\n\n"
+        "## Attack plan\n\n"
+        "Enumerate the surface exhaustively. For each entry, name the assumption the\n"
+        "code rests on and construct the concrete input that violates it. Trace the\n"
+        "violated state forward to the point where value moves or a user is harmed.\n\n"
+        "Escalate every finding to its worst exploitable variant before writing it up:\n"
+        "a denial of service is often theft wearing a smaller hat. When you find a bug\n"
+        "of one class, weaponize the same pattern against every other contract in the\n"
+        "slice before moving on.\n\n"
+        "Every finding needs a concrete call sequence and concrete numbers. Without\n"
+        "them it is a LEAD, and a LEAD emitted honestly is worth more than a finding\n"
+        "asserted confidently.\n\n"
+        "## Output fields\n\n"
+        "Add to your JSON records: proof with concrete values, and the domain tag.\n"
+    )
+    d.joinpath("senior-auditor-sop.md").write_text(f"# SOP\n\n{filler}", encoding="utf-8")
+    d.joinpath("shared-rules.md").write_text(f"# Shared rules\n\n{filler}", encoding="utf-8")
+
+    agent_ids = (
+        {a for a, _ in CORE}
+        | {a for agents in TRIGGERS.values() for a in agents}
+        | set(ROLE)
+        | {"erc-implementer", "eip-expert", "adversarial-verifier"}
+    )
+    for agent_id in agent_ids:
+        d.joinpath(f"{agent_id}-agent.md").write_text(
+            f"# {agent_id.replace('-', ' ').title()} Agent\n\n{filler}", encoding="utf-8"
+        )
+
+    monkeypatch.setattr(base, "REFERENCES", tmp_path)
+    return d

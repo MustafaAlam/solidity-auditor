@@ -350,6 +350,10 @@ class AgentRun(BaseModel):
     records_emitted: int = 0
     records_valid: int = 0
     markers: dict[str, int] = Field(default_factory=dict)
+    transport: Literal["local", "a2a"] = "local"
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
     error: str | None = None
 
 

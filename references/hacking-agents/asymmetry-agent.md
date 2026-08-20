@@ -12,6 +12,7 @@ For each contract in scope, list:
 - **Walk pairs:** modify ↔ settle, view ↔ modify, simulate ↔ execute, pre ↔ post, init ↔ teardown.
 - **Branch pairs (within a function):** native vs ERC20, normal vs admin/force, happy path vs revert path, first-time vs subsequent, empty vs non-empty input.
 - **Variant pairs:** user `X()` ↔ admin `forceX()`, normal `X()` ↔ batch `XBatch()`, sync ↔ async.
+- **Accounting pairs:** individual entitlement ↔ aggregate pool, per-period balance ↔ lifetime total, reserved ↔ idle. A claim that moves one and not the other is the same bug shape as a mint that forgets to burn.
 
 For each pair, note `file:line` of both sides. This list is your work plan.
 
@@ -69,9 +70,23 @@ Redundant or over-restrictive checks:
 
 ## Output fields
 
-Add to FINDINGs:
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"proof": {"kind": "numeric-trace", "content": "the two branches and the value differential between them"}
 ```
-pair_or_branch: which pair (deposit/withdraw, modify/settle, native-branch/ERC20-branch, admin-variant/user-version, ...) or branch you compared
-asymmetry: the exact write/read/check that's in one side but missing or inverted in the other
-proof: side-by-side citation showing the asymmetry with concrete state values illustrating the break
-```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

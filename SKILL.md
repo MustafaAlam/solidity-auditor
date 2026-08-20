@@ -1,19 +1,25 @@
 ---
 name: solidity-auditor
-description: Security audit of Solidity code while you develop. Trigger on "audit", "check this contract", "review for security", "solidity audit", "run the agents". Modes - default (full repo), specific filenames, or --diff. Deep expertise on AMM bin liquidity, oracle/NAV price providers, Q64.64/E6/E8 precision, fee rounding asymmetries, hooks/extensions, hook ordering, lending/private-credit, ERC-4626/7540/1404 vaults, EIP-7702 delegated accounts, proxy/delegatecall storage, EIP-1153 transient storage, cross-chain replay, invariants and adversarial simulations. Production multi-agent architecture - architecture-first MAP with human gate, evidence-driven agent routing, context slicing, strict JSON finding schema, adversarial verifier loop, deterministic reduction, computed confidence, quorum-based degraded reporting, run manifest and eval harness. Version 3.0.0.
+description: Security audit of Solidity code while you develop. Trigger on "audit", "check this contract", "review for security", "solidity audit", "run the agents". Modes - default (full repo), specific filenames, or --diff. Deep expertise on AMM bin liquidity, oracle/NAV price providers, Q64.64/E6/E8 precision, fee rounding asymmetries, hooks/extensions, hook ordering, lending/private-credit, ERC-4626/7540/1404 vaults, EIP-7702 delegated accounts, proxy/delegatecall storage, EIP-1153 transient storage, cross-chain replay, invariants and adversarial simulations. Production multi-agent architecture - architecture-first MAP with human gate, evidence-driven agent routing, context slicing, strict JSON finding schema, adversarial verifier loop, deterministic reduction, computed confidence, quorum-based degraded reporting, run manifest and eval harness. Version 3.1.0.
 ---
 
 # Smart Contract Security Audit
 
-You are the orchestrator of a production multi-agent security audit (v3.0.0).
+You are the orchestrator of a production multi-agent security audit (v3.1.0).
 
 Your job is to run the phase graph below, not to audit the code yourself. The
 agents hunt, the verifier attacks, the scripts reduce, and you route, adjudicate
 and narrate.
 
-## What changed in 3.0.0
+## What changed
 
-v2.7 was a good hunting system with no engineering around it: a fixed 25-agent
+**3.1.0** closed four gaps in 3.0.0, three of which made the system look
+healthier than it was: 25 of 30 lenses were missing from the bundle and agents
+ran blind without erroring; the service's JUDGE phase never ran the four gates;
+the A2A transport existed but was unreachable; and the cost fields were declared
+but never written. See `CHANGELOG.md`.
+
+**3.0.0** — v2.7 was a good hunting system with no engineering around it: a fixed 25-agent
 fan-out, full source to everyone, prose output re-read by the orchestrator,
 hand-picked confidence numbers, no failure handling, no telemetry, and no way to
 tell whether any version was better than the one before it.
@@ -40,9 +46,10 @@ Five structural changes:
 Plus four new specialties for the 2026 surface: `account-abstraction` (EIP-7702),
 `proxy-upgrade`, `transient-storage` (EIP-1153), `crosschain-l2`.
 
-The hunting content — the SOP mental tools, the 25 specialty lenses, the Devil's
-Advocate dimensions, the four judging gates — carries forward. It was the good
-part.
+The hunting content — the SOP mental tools, all 25 v2.7 specialty lenses, the
+Devil's Advocate dimensions, the four judging gates — carries forward. It was the
+good part. Thirty lenses ship in this bundle and `scripts/check_lenses.py`
+verifies every one before a run starts.
 
 ---
 
@@ -94,6 +101,18 @@ Print the banner. Then, in **one message**, make these parallel calls:
 - read the local `VERSION` file
 - probe the runtime: can it spawn parallel sub-agents? background tasks? select a
   model per sub-agent? execute shell commands?
+
+**Lens check (HARD, before anything else costs money):**
+
+```bash
+python3 {resolved_path}/scripts/check_lenses.py
+```
+
+Every agent the router can spawn must have a real specialty file. A routed agent
+with no lens still returns findings, still reports `ok`, and still counts toward
+quorum — its silence on the bug it was meant to catch is indistinguishable from a
+clean result. If this check fails, stop and say which lenses are missing. Do not
+proceed with `--warn-only` unless the user explicitly accepts a degraded run.
 
 Write `run.json` with `phases[0] = {name: "preflight", status: "running"}`.
 
@@ -265,7 +284,8 @@ always retain it and print the path.
 | Sub-agent prompt template | `orchestration/agent-prompt.md` |
 | Output contract | `schemas/finding.schema.json` |
 | Map contract | `schemas/system-map.schema.json` |
-| Hunting lenses | `hacking-agents/*-agent.md` |
+| Hunting lenses (all 30) | `hacking-agents/*-agent.md` |
+| Lens roster contract | `hacking-agents/MANIFEST.json` |
 | Mental tools | `hacking-agents/senior-auditor-sop.md` |
 | Output rules for agents | `hacking-agents/shared-rules.md` |
 | Measuring a version change | `evals/README.md` |

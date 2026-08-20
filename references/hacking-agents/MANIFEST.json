@@ -1,0 +1,252 @@
+{
+  "schema_version": "3.0.1",
+  "note": "Canonical list of every lens the router can spawn. check_lenses.py enforces that each `file` exists and is not a stub before a run starts. A routable agent with no specialty file is the worst failure this system has: it produces plausible generic findings, reports status ok, and looks exactly like a healthy run. Nothing here is optional.",
+  "counts": {
+    "total": 30,
+    "new_in_v3": 5,
+    "ported_from_v2_7": 25,
+    "missing": 0
+  },
+  "lenses": [
+    {
+      "agent_id": "access-control",
+      "role": "lane",
+      "file": "access-control-agent.md",
+      "purpose": "permission model, init, escalation chains, confused deputies",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "account-abstraction",
+      "role": "platform",
+      "file": "account-abstraction-agent.md",
+      "purpose": "EIP-7702 delegate auth, EOA assumptions, 4337 validation",
+      "origin": "v3",
+      "required": true
+    },
+    {
+      "agent_id": "adversarial-verifier",
+      "role": "verifier",
+      "file": "adversarial-verifier-agent.md",
+      "purpose": "attacks candidate findings and tries to refute them",
+      "origin": "v3",
+      "required": true
+    },
+    {
+      "agent_id": "asymmetry",
+      "role": "domain",
+      "file": "asymmetry-agent.md",
+      "purpose": "fee direction, exact-in vs exact-out, branch asymmetries",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "boundary",
+      "role": "lane",
+      "file": "boundary-agent.md",
+      "purpose": "zero/max/empty/single-element edges, external-call corner cases",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "crosschain-l2",
+      "role": "platform",
+      "file": "crosschain-l2-agent.md",
+      "purpose": "chain-id binding, replay, sequencer, block-time drift",
+      "origin": "v3",
+      "required": true
+    },
+    {
+      "agent_id": "economic-security",
+      "role": "domain",
+      "file": "economic-security-agent.md",
+      "purpose": "attacker economics, incentive alignment, profitability",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "eip-expert",
+      "role": "domain",
+      "file": "eip-expert-agent.md",
+      "purpose": "EIP semantics the code claims to implement",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "erc-implementer",
+      "role": "domain",
+      "file": "erc-implementer-agent.md",
+      "purpose": "claimed-vs-actual standard conformance",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "execution-trace",
+      "role": "lane",
+      "file": "execution-trace-agent.md",
+      "purpose": "state-vs-call ordering, reentrancy paths, callback liveness",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "first-principles",
+      "role": "lane",
+      "file": "first-principles-agent.md",
+      "purpose": "implicit assumptions the code rests on, unnamed bug classes",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "flow-gap",
+      "role": "gap",
+      "file": "flow-gap-agent.md",
+      "purpose": "seams between value flow and callback control flow",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "formal-verifier",
+      "role": "proof",
+      "file": "formal-verifier-agent.md",
+      "purpose": "safety/liveness/functional properties, CVL and Halmos sketches",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "fuzzer",
+      "role": "proof",
+      "file": "fuzzer-agent.md",
+      "purpose": "property and campaign design",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "hook-ordering",
+      "role": "domain",
+      "file": "hook-ordering-agent.md",
+      "purpose": "hooks called after the mutation they were meant to guard",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "invariant",
+      "role": "lane",
+      "file": "invariant-agent.md",
+      "purpose": "conservation laws, state couplings, capacity caps, round-trips",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "invariant-tester",
+      "role": "proof",
+      "file": "invariant-tester-agent.md",
+      "purpose": "harness gaps in the existing test suite",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "lending-expert",
+      "role": "domain",
+      "file": "lending-expert-agent.md",
+      "purpose": "accrual, LTV, liquidation, waterfall, credit lifecycle",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "math-precision",
+      "role": "lane",
+      "file": "math-precision-agent.md",
+      "purpose": "rounding direction, scale mixing, truncation, unsafe casts",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "numerical-gap",
+      "role": "gap",
+      "file": "numerical-gap-agent.md",
+      "purpose": "seams between precision, invariants and boundaries",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "oracle-expert",
+      "role": "domain",
+      "file": "oracle-expert-agent.md",
+      "purpose": "price provenance, staleness, NAV, sequencer uptime",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "periphery",
+      "role": "domain",
+      "file": "periphery-agent.md",
+      "purpose": "router trust, token wrappers, integration surfaces",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "poc-writer",
+      "role": "proof",
+      "file": "poc-writer-agent.md",
+      "purpose": "turns candidates into runnable Foundry exploits",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "proxy-upgrade",
+      "role": "platform",
+      "file": "proxy-upgrade-agent.md",
+      "purpose": "storage collision, uninitialized impl, CPIMP, __gap arithmetic",
+      "origin": "v3",
+      "required": true
+    },
+    {
+      "agent_id": "signature-gap",
+      "role": "gap",
+      "file": "signature-gap-agent.md",
+      "purpose": "seams between signature validation and oracle/crosschain state",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "signature-trust",
+      "role": "domain",
+      "file": "signature-trust-agent.md",
+      "purpose": "nonce, domain separator, deadline, malleability",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "tokenomics-analyst",
+      "role": "domain",
+      "file": "tokenomics-analyst-agent.md",
+      "purpose": "emissions, vesting, reward accounting, ve-locks",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "transient-storage",
+      "role": "platform",
+      "file": "transient-storage-agent.md",
+      "purpose": "EIP-1153 lock lifetime, tx-scope reuse, flash accounting",
+      "origin": "v3",
+      "required": true
+    },
+    {
+      "agent_id": "trust-gap",
+      "role": "gap",
+      "file": "trust-gap-agent.md",
+      "purpose": "semi-trusted roles, timelock bypass, governance seams",
+      "origin": "v2.7-ported",
+      "required": true
+    },
+    {
+      "agent_id": "yield-strategist",
+      "role": "domain",
+      "file": "yield-strategist-agent.md",
+      "purpose": "share math, async request lifecycle, idle vs reserved cash",
+      "origin": "v2.7-ported",
+      "required": true
+    }
+  ]
+}

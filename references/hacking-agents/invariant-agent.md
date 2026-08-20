@@ -29,6 +29,8 @@ Extract every relationship that must hold:
 - **Strand value across emergency transitions.** Emergency mode pauses normal flows but the cleanup path doesn't sweep accumulated rewards/earnings; value generated in emergency is permanently stuck. Find every emergency-pause that lacks a paired cleanup.
 - **Bypass capacity caps on secondary mutation paths.** A `<= cap` check enforced on `deposit()` is skipped on settlement, fee accrual, or LP-earnings addition; the cap can be exceeded silently. Enumerate every path that increments the capped value.
 - **Couple state-price reads across mutating paths.** Liquidation reads price and balance at different points in the same transaction; price moves between the reads (oracle update, swap, hook) and the liquidation pays the wrong amount.
+- **Consume one accounting dimension without the other.** A claim, redemption or settlement decrements an individual entitlement but leaves the aggregate pool it was drawn from unchanged — or the reverse. Enumerate every pair of (individual balance, aggregate pool) and every function that writes either; each writer must move both or explicitly justify why not. The drift is invisible per-call and fatal in aggregate.
+- **Overlap lifecycle windows that must be disjoint.** Two phases the design assumes are sequential (withdrawal window vs payout window, request vs claim, lock vs unlock) share a timestamp boundary that permits both to be open at once. Check every `>=` against every `>` on the boundary, and construct the block where both predicates hold.
 
 ## Step 3 — Construct the exploit
 
@@ -36,4 +38,23 @@ For every broken invariant: what initial state is needed, what calls break it, w
 
 ## Output fields
 
-Add to FINDINGs:
+You emit **JSON Lines**, one record per line, per `shared-rules.md`. There is no
+prose FINDING block in v3 — a record that is not valid JSON is quarantined out
+of the report.
+
+Alongside the required fields, records from this lens set:
+
+```json
+"proof": {"kind": "state-sequence", "content": "initial state, the calls that break the invariant, the call that extracts value, and who loses"}
+```
+
+Remember the rest of the contract: `group_key` is exactly
+`"<contract>|<function>|<bug_class>"`, `axes` says which risk axes you covered,
+`fix.add_lines` carries the added lines alone so distinct fixes survive
+reduction, and all six `devils_advocate` dimensions are required. A record with
+no `proof` is a `LEAD`, not a `FINDING` — and a LEAD emitted honestly is worth
+more than a finding asserted confidently.
+
+Emit a `COVERAGE_NOTE` for every hot function in your slice that you examined
+and found clean. "Checked, clean" and "never looked" are indistinguishable in a
+findings list, and only one of them is reassuring.

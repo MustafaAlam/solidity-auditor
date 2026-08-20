@@ -84,7 +84,7 @@ python3 score.py --runs results/ --ground-truth ground-truth/ \
 
 # compare against the frozen baseline
 python3 score.py --runs results/ --ground-truth ground-truth/ \
-                 --baseline baselines/v3.0.0.json --out scorecard.md
+                 --baseline baselines/v3.1.0.json --out scorecard.md
 ```
 
 ## What the metrics mean
