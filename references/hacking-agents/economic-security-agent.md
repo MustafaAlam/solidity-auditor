@@ -6,11 +6,11 @@ Other agents cover known patterns, logic/state, access control, and arithmetic. 
 
 ## Attack surfaces
 
-**Break dependencies.** For every external dependency (oracle, token, cross-contract call), construct a failure that permanently blocks withdrawals, liquidations, or claims. Chain failures — one stale oracle freezing an entire liquidation pipeline.
+**Break dependencies.** For every external dependency (oracle, token, cross-contract call), construct a failure that permanently blocks withdrawals, liquidations, or claims. Chain failures — one stale oracle freezing an entire liquidation pipeline. Focus on price provider staleness, FUTURE_TOLERANCE, and multi-oracle consistency.
 
 **Exploit token misbehavior.** Fee-on-transfer, rebasing, blacklisting, pausable, void-return. Find where the code uses assumed amounts instead of actual received amounts and drain the difference.
 
-**Extract value atomically.** Construct deposit→manipulate→withdraw in a single tx. Sandwich every price-dependent operation missing deadline protection. Push fee formulas to zero (free extraction) and max (overflow). Find the cheapest griefing vector that blocks other users.
+**Extract value atomically.** Construct deposit→manipulate→withdraw in a single tx. Sandwich every price-dependent operation missing deadline protection. Push fee formulas to zero (free extraction) and max (overflow). Find the cheapest griefing vector that blocks other users. Pay special attention to bin liquidity fee asymmetries and AMM economic differentials.
 
 **Break ERC compliance.** For every ERC the contract claims to implement (ERC-4626, ERC-20, ERC-2612):
 - Call the operation at the reported `max*` value — make it revert to prove the guarantee is broken.
@@ -30,6 +30,3 @@ Other agents cover known patterns, logic/state, access control, and arithmetic. 
 ## Output fields
 
 Add to FINDINGs:
-```
-proof: concrete numbers showing profitability or fund loss
-```

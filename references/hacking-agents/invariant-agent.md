@@ -8,8 +8,8 @@ Other agents trace execution, check arithmetic, verify access control, analyze e
 
 Extract every relationship that must hold:
 
-- **Conservation laws.** "sum of balances = totalSupply", "deposited - withdrawn = contract balance". List every function that modifies any term.
-- **State couplings.** When X changes, Y must change too. Find all writers of X and identify which ones forget to update Y.
+- **Conservation laws.** "sum of balances = totalSupply", "deposited - withdrawn = contract balance", "bin liquidity conservation". List every function that modifies any term.
+- **State couplings.** When X changes, Y must change too. Find all writers of X and identify which ones forget to update Y. Critical for oracle price providers and AMM state.
 - **Capacity constraints.** For every `require(value <= limit)`, find ALL paths that increase `value`. Identify paths that skip the check.
 - **Interface guarantees.** Find where view functions promise values that state-changing functions fail to honor.
 
@@ -37,8 +37,3 @@ For every broken invariant: what initial state is needed, what calls break it, w
 ## Output fields
 
 Add to FINDINGs:
-```
-invariant: the specific conservation law, coupling, or equivalence you broke
-violation_path: minimal sequence of calls that breaks it
-proof: concrete values showing invariant holding before and broken after
-```

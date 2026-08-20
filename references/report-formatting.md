@@ -1,97 +1,90 @@
 # Report Formatting
 
-## Report Path
+Final output of Turn 4 must follow this exact structure. No intermediate dedup lists. Go straight to the report.
 
-Save the report to `{project-name}-pashov-ai-audit-report-{timestamp}.md` in the current working directory, where `{project-name}` is the repo root basename and `{timestamp}` is `YYYYMMDD-HHMMSS` at scan time.
+## Header
 
-## Output Format
-
-````
-# 🔐 Security Review — <ContractName or repo name>
-
----
-
-## Scope
-
-|                                  |                                                        |
-| -------------------------------- | ------------------------------------------------------ |
-| **Mode**                         | ALL / default / filename                               |
-| **Files reviewed**               | `File1.sol` · `File2.sol`<br>`File3.sol` · `File4.sol` | <!-- list every file, 3 per line -->
-| **Confidence threshold (1-100)** | N                                                      |
-
----
-
-## Findings
-
-[95] **1. <Title>**
-
-`ContractName.functionName` · Confidence: 95
-
-**Description**
-<The vulnerable code pattern and why it is exploitable, in 1 short sentence>
-
-**Fix**
-
-```diff
-- vulnerable line(s)
-+ fixed line(s)
 ```
----
-
-[82] **2. <Title>**
-
-`ContractName.functionName` · Confidence: 82
-
-**Description**
-<The vulnerable code pattern and why it is exploitable, in 1 short sentence>
-
-**Fix**
-
-```diff
-- vulnerable line(s)
-+ fixed line(s)
+# Metric / <Protocol> Security Audit Report
+**Skill version:** <VERSION>
+**Date:** <YYYY-MM-DD>
+**Scope:** <list of in-scope contracts or "full repo excluding interfaces/lib/mocks/test">
+**Agents run:** 15 (11 single-specialty including dedicated hook-ordering + 4 gap-hunters)
+**Completeness:** N unique (Contract, function) in raw → N covered in final
 ```
----
 
-< ... all above-threshold findings >
+## Summary box (top of report)
 
----
+- Critical: X
+- High: Y
+- Medium: Z
+- Low / Informational: W
+- Leads retained: V
 
-[75] **3. <Title>**
+Then a short paragraph of the most important systemic themes (e.g. "fee rounding direction + hook ordering after mutation + oracle hard-dependency").
 
-`ContractName.functionName` · Confidence: 75
+## Findings (numbered, ordered by severity then by exploitability)
 
-**Description**
-<The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+For each finding:
 
----
+```
+### N. [SEVERITY] Short title
+**Contracts / Functions:** `Contract.function`, `Other.function`
+**Bug class:** kebab-tag
+**Group key:** Contract | function | bug-class
+**Agents:** [1, 5, 11]
+**Confidence:** 90 (or 75 for promoted LEAD)
 
-< ... all below-threshold findings (description only, no Fix block) >
+**Path:**
+caller → function → state change → impact
 
----
+**Root cause:**
+one sentence, code-level
 
-Findings List
+**Proof:**
+concrete numbers / traces / quoted lines. Must be sufficient to reproduce without the original agent notes.
 
-| # | Confidence | Title |
-|---|---|---|
-| 1 | [95] | <title> |
-| 2 | [82] | <title> |
-| 3 | [75] | <title> |
+**Description:**
+1–3 sentences. Impact on users / LPs / protocol solvency / MEV.
 
----
+**Fix:**
+If single fix:
+```diff
+- old
++ new
+```
+or one-sentence suggestion if a full diff is not natural.
 
-## Leads
+If ≥2 distinct fixes (HARD GATE from Turn 4):
+**Fix (Option A — <label>)**:
+```diff
+...
+```
+**Fix (Option B — <label>)**:
+```diff
+...
+```
 
-_Vulnerability trails with concrete code smells where the full exploit path could not be completed in one analysis pass. These are not false positives — they are high-signal leads for manual review. Not scored._
+**Notes / Chain:** (optional) if this finding feeds another, write `Chain: [N] + [M]`.
+```
 
-- **<Title>** — `Contract.function` — Code smells: <missing guard, unsafe arithmetic, etc.> — <1-2 sentence description of the trail and what remains unverified>
-- **<Title>** — `Contract.function` — Code smells: <...> — <1-2 sentence description>
+Severity labels: CRITICAL (direct fund loss or permanent DoS of core path), HIGH (griefing that freezes trading / selective censorship / large economic leakage), MEDIUM (state inconsistency / non-atomic admin / asymmetric branches that can be gamed), LOW (theoretical, hard to reach, or pure info).
 
----
+## Leads section (after all findings)
 
-> ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. Team security reviews, bug bounty programs, and on-chain monitoring are strongly recommended. For a consultation regarding your projects' security, visit [https://www.pashov.com](https://www.pashov.com)
+Only LEADs that survived gating and were not promoted. Keep them short.
 
-````
+## Appendix (optional)
 
-**Rules:** Follow the template above exactly. Sort findings by confidence (highest first). Findings below the threshold get a description but no **Fix** block. Draft findings directly in report format — do not re-generate.
+- Marker compliance summary (if the orchestrator grepped)
+- Files scanned
+- Bundle line counts
 
+## Rules for the writer of the final report
+
+- Never re-read source "just to double-check" after agents finished. Agents + dedup already did the work.
+- Preserve every distinct mechanism and every distinct fix. No silent dropping.
+- Wide-description when multiple mechanisms share a group_key: list them all under one heading.
+- Function isolation is HARD: never merge findings that live in different functions.
+- Completeness line is mandatory and must be accurate.
+- After the report is printed (and optional `--file-output` write), delete the scratch bundle dir.

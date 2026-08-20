@@ -51,16 +51,25 @@ FINDINGs have concrete, unguarded, exploitable attack paths. LEADs have real cod
 
 **One vulnerability per item.** Same root cause = one item. Different fixes needed = separate items.
 
+Specialty files may add extra fields (`seam`, `guard_gap`, `pair_or_branch`, …). Always include the fields below so the orchestrator can dedup.
+
 ```
 FINDING | contract: Name | function: func | bug_class: kebab-tag | group_key: Contract | function | bug-class
+lane: themed lane
+domain: optional (lending / erc / eip / oracle / vault / tokenomics / poc / formal / fuzz)
 path: caller → function → state change → impact
 proof: concrete values/trace demonstrating the bug
 description: one sentence
 fix: one-sentence suggestion
+da_score: 6 one-line notes (guards / reentrancy / access / by-design / economic / dry-run)
+poc: Foundry sketch or why-not (required if Medium+)
 
 LEAD | contract: Name | function: func | bug_class: kebab-tag | group_key: Contract | function | bug-class
+lane: themed lane
+domain: optional
 code_smells: what you found
-description: one sentence explaining trail and what remains unverified
+description: one sentence explaining the trail and what remains unverified
+da_score: 6 one-line notes (or why a dimension blocked promotion)
 ```
 
-The `group_key` enables deduplication: `ContractName | functionName | bug_class`. Agents may add custom fields.
+The `group_key` enables deduplication: `ContractName | functionName | bug_class`.

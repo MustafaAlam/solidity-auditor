@@ -29,8 +29,3 @@ Do NOT report named vulnerability classes, gas optimizations, style issues, or a
 ## Output fields
 
 Add to FINDINGs:
-```
-assumption: the specific assumption you violated
-violation: how you broke it
-proof: concrete trace showing the broken assumption and the extracted value
-```

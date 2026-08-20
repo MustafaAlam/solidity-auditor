@@ -6,9 +6,9 @@ Other agents cover logic, state, and access control. You exploit the math.
 
 ## Attack surfaces
 
-**Map the math.** Identify all fixed-point systems (WAD, RAY, BPS, token decimals, oracle decimals), scale conversion points, and every division in value-moving functions.
+**Map the math.** Identify all fixed-point systems (WAD, RAY, BPS, token decimals, oracle decimals, Q64.64, E6/E8), scale conversion points, and every division in value-moving functions.
 
-**Exploit wrong rounding.** Deposits must round shares DOWN, withdrawals round assets DOWN, debt rounds UP, fees round UP. Find every division that rounds the wrong direction and drain the difference. Compoundable wrong direction = critical.
+**Exploit wrong rounding.** Deposits must round shares DOWN, withdrawals round assets DOWN, debt rounds UP, fees round UP. Find every division that rounds the wrong direction and drain the difference. Compoundable wrong direction = critical. Look for asymmetric fee rounding in bin trades and liquidity operations.
 
 **Zero-round to steal.** Feed minimum inputs (1 wei, 1 share) into every calculation. Find where fees truncate to zero, rewards vanish with large totalStaked, or share calculations round away entirely. A ratio truncating to zero flips formulas — exploit it.
 
@@ -43,6 +43,3 @@ Other agents cover logic, state, and access control. You exploit the math.
 ## Output fields
 
 Add to FINDINGs:
-```
-proof: concrete arithmetic showing the bug with actual numbers
-```

@@ -1,73 +1,79 @@
-# Finding Validation
+# Judging Gates (Turn 4)
 
-Every finding passes four sequential gates. Fail any gate → **rejected** or **demoted** to lead. Later gates are not evaluated for failed findings.
+Every deduped candidate (FINDING or LEAD) must pass through these four gates in fixed order. One-line verdict per gate. No reordering, no skipping, no revisiting after a verdict is written.
 
-You are not defending the code. The job of these gates is to verify the attacker's claimed exploit actually fires end-to-end — anything that interrupts the attack between the attacker's call and the harm means the agent's claim does not execute, and only then does it fail to qualify as a finding.
+`UNCERTAIN = ALLOWS` for the purpose of this audit. Commit and move on.
 
-## Gate 1 — Attack execution
+You are not defending the code. The gates verify the claimed exploit fires end-to-end — anything that interrupts the attack between the call and the harm means the claim does not execute.
 
-Trace the agent's claimed attack path from caller to harm. Read every guard, check, modifier, and constraint that sits on that path. Confirm that none of them interrupts the attack before the exploit step fires.
-- A specific guard / check / modifier on the attack path interrupts the claimed exploit step before harm occurs (quote the exact line and trace it) → **REJECTED** (or **DEMOTE** if a related code smell remains)
-- The supposed interruption is speculative ("probably wouldn't happen", "the caller would notice", "the deployer would set X") → **clears**, continue
+## Gate 1 — Reachability
 
-## Gate 2 — Reachability
+Is there a concrete, unguarded call path from an external user (or a role that an attacker can obtain) to the defective line?
 
-Prove the vulnerable state exists in a live deployment.
+- BLOCKS: only owner/admin/privileged role can reach it AND that role cannot be obtained by an attacker (no broken init, no role grant path, no confused deputy).
+- ALLOWS: any external or permissionless path, or a path that only requires a role that is easy to acquire or that the attacker already holds via another bug.
+- IRRELEVANT: dead code / never called.
+- UNCERTAIN: treat as ALLOWS.
 
-- Structurally impossible (enforced invariant prevents it) → **REJECTED**
-- Requires privileged actions outside normal operation → **DEMOTE**
-- Achievable through normal usage or common token behaviors → **clears**, continue
+## Gate 2 — Impact
 
-## Gate 3 — Trigger
+Does the path produce one of: fund loss, permanent DoS of a core user flow (swap/add/remove), selective censorship of users, or a break of a core economic invariant (solvency, conservation of value, fee fairness)?
 
-Prove an unprivileged actor executes the attack.
+- BLOCKS: pure self-harm, pure gas grief with no lasting state damage, pure admin convenience, or "theoretical under perfect conditions that never occur".
+- ALLOWS: real economic or availability impact on honest users / LPs / protocol.
+- IRRELEVANT: the "bug" is actually the intended design (e.g. MEV, first-depositor dust after MINIMUM_LIQUIDITY).
+- UNCERTAIN: treat as ALLOWS.
 
-- Only trusted roles can trigger → **DEMOTE**
-- Unprivileged actor triggers profitably → **clears**, continue
+## Gate 3 — Code-level defect
 
-**Admin-action findings — reject unless an unprivileged amplifier is named.** This applies ONLY to actions performed by admin/owner, NOT to unprivileged attacker actions. If the harm requires the admin acting maliciously or against documented intent, **REJECT** — do not even emit as a LEAD (stricter than the DEMOTE above). The finding clears only when the body names a concrete unprivileged amplifier:
+Is the root cause a real defect in the source (missing check, wrong rounding, missing mirror update, late nonce write, etc.) rather than an assumption about off-chain behavior or future governance?
+
+- BLOCKS: the finding relies on "admin would never do X" or "the oracle is honest" without an on-chain enforcement.
+- ALLOWS: the defect is visible in the code itself.
+- IRRELEVANT: the finding is a design trade-off that is documented and accepted.
+- UNCERTAIN: treat as ALLOWS.
+
+## Gate 4 — Fixability & minimality
+
+Is there a small, local change that eliminates the defect without breaking the intended happy path?
+
+- BLOCKS: the only "fix" is a complete redesign of the protocol.
+- ALLOWS: a one- or two-line change, a require, a reordering, a Ceil instead of Floor, moving a hook before the callback, etc.
+- IRRELEVANT: already fixed or mitigated by another mechanism that the agent missed.
+- UNCERTAIN: treat as ALLOWS.
+
+## Admin-action findings
+
+Applies ONLY when the *harm step* is an admin/owner action, not when an unprivileged attacker is the actor.
+
+If harm requires the admin acting maliciously or against documented intent, **REJECT** (do not emit as a LEAD) unless the body names a concrete unprivileged amplifier:
 
 - **race** — admin sets X mid-flow; an unprivileged user exploits the window before the update propagates.
 - **retroactive sweep** — an admin update rewrites a pending value already credited.
 - **asymmetric formula** — admin output chains into a formula an unprivileged actor profits from.
 - **access gap** — missing guard, tautological auth, or missing init guard (the access mechanism itself is the bug).
 
-No amplifier named → **REJECTED**. Amplifier named → judge it on that unprivileged path.
-
-## Gate 4 — Impact
-
-Prove material harm to an identifiable victim.
-
-- Self-harm only → **REJECTED**
-- Dust-level, no compounding → **DEMOTE**
-- Material loss to identifiable victim → **CONFIRMED**
-
-## Confidence
-
-Start at **100**, deduct: partial attack path **-20**, bounded non-compounding impact **-15**, requires specific (but achievable) state **-10**. Confidence ≥ 80 gets description + fix. Below 80 gets description only.
+No amplifier named → REJECTED. Amplifier named → judge that unprivileged path through Gates 1–4 as usual.
 
 ## Safe patterns (do not flag)
 
-- `unchecked` in 0.8+ (but verify the reasoning is correct)
-- Explicit narrowing casts in 0.8+ (reverts on overflow)
+- `unchecked` in 0.8+ (verify the overflow reasoning is correct)
+- Explicit narrowing casts in 0.8+ (revert on overflow)
 - MINIMUM_LIQUIDITY burn on first deposit
-- SafeERC20 (`safeTransfer`/`safeTransferFrom`)
-- `nonReentrant` (only flag cross-contract attacks)
+- SafeERC20 (`safeTransfer` / `safeTransferFrom`)
+- `nonReentrant` (only flag cross-contract / hook paths the mutex does not cover)
 - Two-step admin transfer
 - Consistent protocol-favoring rounding unless compounding or zero-rounding
 
-## Lead promotion
+## Lead promotion rules (after the four gates)
 
-Before finalizing leads, promote where warranted:
+- A LEAD becomes a FINDING (confidence 75) only if:
+  - the full exploit chain is present in the source, OR
+  - ≥2 agents flagged the same issue (even if each was only a LEAD).
+- Multi-agent agreement does **not** override a Gate 1 or Gate 2 BLOCKS. If the code path is interrupted before harm, demote back to LEAD.
+- Same root cause confirmed as FINDING in one contract → promote the identical pattern in every other in-scope contract where it appears.
+- Never reason from deployer intent. Only from what the code allows.
 
-- **Cross-contract echo.** Same root cause confirmed as FINDING in one contract → promote in every contract where the identical pattern appears.
-- **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75.
-- **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, description only.
+## Final filter
 
-## Leads
-
-High-signal trails for manual investigation. No confidence score, no fix — title, code smells, and what remains unverified.
-
-## Do Not Report
-
-Linter/compiler issues, gas micro-opts, naming, NatSpec. Admin privileges by design. Missing events. Centralization without exploit path. Implausible preconditions (but fee-on-transfer, rebasing, blacklisting ARE plausible for contracts accepting arbitrary tokens).
+Exclude anything that received BLOCKS on Gate 1, 2 or 3, or that failed the admin-amplifier rule. Keep everything that received ALLOWS (or UNCERTAIN) on all four gates. Promoted LEADs are written as FINDINGs with conf 75.

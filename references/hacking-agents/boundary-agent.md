@@ -71,9 +71,3 @@ Without all three, it's a LEAD.
 ## Output fields
 
 Add to FINDINGs:
-```
-boundary: which call site / branch / input you exercised
-assumption: what the calling code assumes the boundary does
-actual: what the boundary actually does under your corner-case input
-proof: concrete trigger and resulting state delta
-```

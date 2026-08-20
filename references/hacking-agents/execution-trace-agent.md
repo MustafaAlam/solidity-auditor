@@ -26,8 +26,3 @@ Other agents cover known patterns, arithmetic, permissions, economics, invariant
 ## Output fields
 
 Add to FINDINGs:
-```
-input: which parameter(s) you control and what values you supply
-assumption: the implicit assumption you violated
-proof: concrete trace from entry to impact with specific values
-```
